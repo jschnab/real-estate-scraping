@@ -1,8 +1,12 @@
+import bs4
 from bs4 import BeautifulSoup
 from configparser import ConfigParser
-from itertools import cycle
+from itertools import chaine, cycle
+import numpy as np
 from random import choice
+import re
 import requests
+import time
 
 
 def get_user_agents():
@@ -169,6 +173,7 @@ def is_valid_link(link):
 
 
 def get_links(url, headers_proxies, timeout, count):
+    time.sleep(0.3)
     if count == 999:
         return
     count += 1
