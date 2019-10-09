@@ -1,7 +1,8 @@
 import bs4
 from bs4 import BeautifulSoup
+from collections import deque
 from configparser import ConfigParser
-from itertools import chaine, cycle
+from itertools import chain, cycle
 import numpy as np
 from random import choice
 import re
@@ -158,7 +159,7 @@ def get_details(prop):
     return results
 
 
-def is_valid_link(link):
+def is_valid(link):
     """
     Determines if a link should be followed when crawling the web site.
 
@@ -179,7 +180,7 @@ def get_links(url, headers_proxies, timeout, count):
     count += 1
     global pages
     if url[0] == '/':
-        url = f'https://www.zillow.com/{url}'
+        url = f'https://www.zillow.com{url}'
     hp = choice(headers_proxies)
     contents = get_page_contents(url, hp['header'], timeout, hp['proxy'])
     if contents is not None:
@@ -193,17 +194,97 @@ def get_links(url, headers_proxies, timeout, count):
         return
 
 
+def crawl_dfs(start, header_proxies, timeout=20):
+    """
+    Crawl through Zillow using depth-first search.
+
+    :param start str: URL where to start crawling
+    :param header_proxies List[Dict]: list of dictionaries where one key
+                                      contains a proxy and the other key
+                                      contains HTTP headers
+    :param timeout int: timeout for HTTP GET requests (seconds)
+    :return set: set of URL found during crawling
+    """
+    to_explore = deque([start])
+    explored = set(start)
+
+    while to_explore:
+        current = to_explore.pop()
+        if current[0] == '/':
+            current = f'https://www.zillow.com{url}'
+
+        identity = choice(headers_proxies)
+        contents = get_page_contents(
+            current,
+            identity['header'],
+            timeout,
+            identity['proxy'])
+
+        if contents is not None:
+            soup = BeautifulSoup(contents, 'html.parser')
+            links = [link for link in soup.find_all('a') if is_valid(link)]
+            for link in links:
+                new_page = link.attrs['href']
+                if new_page in explored:
+                    continue
+                print(new_page)
+                to_explore.append(new_page)
+                explored.add(new_page)
+
+    return explored
+
+
+def crawl_bfs(start, header_proxies, timeout=20):
+    """
+    Crawl through Zillow using breadth-first search.
+
+    :param start str: URL where to start crawling
+    :param header_proxies List[Dict]: list of dictionaries where one key
+                                      contains a proxy and the other key
+                                      contains HTTP headers
+    :param timeout int: timeout for HTTP GET requests (seconds)
+    :return set: set of URL found during crawling
+    """
+    to_explore = deque([start])
+    explored = set(start)
+
+    while to_explore:
+        current = to_explore.popleft()
+        if current[0] == '/':
+            current = f'https://www.zillow.com{url}'
+
+        identity = choice(headers_proxies)
+        contents = get_page_contents(
+            current,
+            identity['header'],
+            timeout,
+            identity['proxy'])
+
+        if contents is not None:
+            soup = BeautifulSoup(contents, 'html.parser')
+            links = [link for link in soup.find_all('a') if is_valid(link)]
+            for link in links:
+                new_page = link.attrs['href']
+                if new_page in explored:
+                    continue
+                print(new_page)
+                to_explore.append(new_page)
+                explored.add(new_page)
+
+    return explored
+
+
+
 if __name__ == '__main__':
     proxies = get_proxies()
     user_agents = get_user_agents()
     headers = get_headers(user_agents, proxies)
     hp = [{'proxy': x, 'header': y} for x, y in zip(proxies, headers)]
-    pages = set()
-    get_links(
+
+    pages = crawl_bfs(
         'https://www.zillow.com/new-york-ny/cheap-apartments/',
-        headers_proxies=hp,
-        timeout=20,
-        count=1)
+        headers_proxies=hp)
+
     with open('output.txt', 'w') as f:
         for p in pages:
             f.write(p + '\n')
