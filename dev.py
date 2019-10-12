@@ -194,12 +194,12 @@ def get_links(url, headers_proxies, timeout, count):
         return
 
 
-def crawl_dfs(start, header_proxies, timeout=20):
+def crawl_dfs(start, headers_proxies, timeout=20):
     """
     Crawl through Zillow using depth-first search.
 
     :param start str: URL where to start crawling
-    :param header_proxies List[Dict]: list of dictionaries where one key
+    :param headers_proxies List[Dict]: list of dictionaries where one key
                                       contains a proxy and the other key
                                       contains HTTP headers
     :param timeout int: timeout for HTTP GET requests (seconds)
@@ -211,7 +211,7 @@ def crawl_dfs(start, header_proxies, timeout=20):
     while to_explore:
         current = to_explore.pop()
         if current[0] == '/':
-            current = f'https://www.zillow.com{url}'
+            current = f'https://www.zillow.com{current}'
 
         identity = choice(headers_proxies)
         contents = get_page_contents(
@@ -234,12 +234,12 @@ def crawl_dfs(start, header_proxies, timeout=20):
     return explored
 
 
-def crawl_bfs(start, header_proxies, timeout=20):
+def crawl_bfs(start, headers_proxies, timeout=20):
     """
     Crawl through Zillow using breadth-first search.
 
     :param start str: URL where to start crawling
-    :param header_proxies List[Dict]: list of dictionaries where one key
+    :param headers_proxies List[Dict]: list of dictionaries where one key
                                       contains a proxy and the other key
                                       contains HTTP headers
     :param timeout int: timeout for HTTP GET requests (seconds)
@@ -251,7 +251,7 @@ def crawl_bfs(start, header_proxies, timeout=20):
     while to_explore:
         current = to_explore.popleft()
         if current[0] == '/':
-            current = f'https://www.zillow.com{url}'
+            current = f'https://www.zillow.com{current}'
 
         identity = choice(headers_proxies)
         contents = get_page_contents(
