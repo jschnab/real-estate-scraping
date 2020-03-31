@@ -13,11 +13,9 @@ import requests
 
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
+from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
 from urllib.error import URLError
-from urllib3.exceptions import MaxRetryError
-
-from proxy_utils import format_proxies
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
@@ -31,8 +29,8 @@ class Explored:
 
     def add(self, *args):
         """
-        Add arguments to the set.
-        Arguments should be of type 'string'.
+        Add args to the set.
+        Note: args should be of type 'string'.
         """
         for a in args:
             if not isinstance(a, str):
@@ -41,9 +39,9 @@ class Explored:
 
     def contains(self, *args):
         """
-        Check if the arguments are present in the set.
-        Returns True if none of the arguments are in the set, else False.
-        Arguments should be of type 'string'.
+        Check if the args are present in the set.
+        Returns True if none of the args are in the set, else False.
+        Note: args should be of type 'string'.
         """
         for a in args:
             if not isinstance(a, str):
@@ -63,8 +61,8 @@ class Crawler:
         headers=None,
         user_agents=None,
         proxies=None,
-        timeout=10,
-        max_retries=10,
+        timeout=5,
+        max_retries=8,
         backoff_factor=0.3,
         retry_on=[500, 502, 503, 504],
         crawl_delay=0.5,
@@ -126,7 +124,7 @@ class Crawler:
             self.robot_parser = RobotFileParser()
             self.robot_parser.set_url(urljoin(base_url, "robots.txt"))
             self.robot_parser.read()
-            self.crawl_delay = self.robot_parser.crawl_delay or crawl_delay
+            self.crawl_delay = self.robot_parser.crawl_delay("") or crawl_delay
         except URLError:
             logging.warning(
                 "could not find robots.txt, setting craw_delay "
@@ -157,7 +155,7 @@ class Crawler:
         with open(file_name) as f:
             self.user_agents = json.load(f)
 
-    def get_proxies(self, file_name):
+    def get_proxies(self, file_name, fmt=False):
         """
         Read and format request proxies from a JSON file.
 
@@ -165,7 +163,7 @@ class Crawler:
         :return dict: request headers
         """
         with open(file_name) as f:
-            self.proxies = format_proxies(json.load(f))
+            self.proxies = json.load(f)
 
     def choose_headers(self):
         """
@@ -252,7 +250,8 @@ class Crawler:
             )
             return response.content
 
-        except MaxRetryError:
+        except RequestException:
+            logging.error(f"too many retries while downloading {url}")
             return
 
     def crawl_bfs(self, initial=None):
@@ -262,6 +261,7 @@ class Crawler:
         :param str initial: URL where to start crawling (suffix to append
                             to the base URL)
         """
+        logging.info("start crawling")
         if not initial:
             initial = self.base_url
 
@@ -279,12 +279,14 @@ class Crawler:
                 logging.error("all proxies have been exhausted, stopping")
                 return
 
-            crawl_current = self.to_crawl.pop()
-            if not self.can_crawl(headers["User-Agent"], crawl_current):
+            current = self.to_crawl.pop()
+            if not self.can_crawl(headers["User-Agent"], current):
+                logging.info("cannot crawl the current page, skipping")
                 continue
 
-            contents_current = self.download_page(
-                url=crawl_current,
+            logging.info(f"downloading {current}")
+            contents = self.download_page(
+                url=current,
                 headers=headers,
                 proxies=proxy,
                 timeout=self.timeout,
@@ -294,15 +296,18 @@ class Crawler:
 
             # if download failed, push URL back to queue and
             # remove proxy from list
-            if contents_current is None:
-                self.to_crawl.appendleft(crawl_current)
+            if contents is None:
+                logging.info(f"download {current} failed, will retry later")
+                self.to_crawl.appendleft(current)
                 self.proxies.remove(proxy)
                 continue
 
-            soup = self.parser(contents_current)
+            logging.info("parsing page")
+            soup = self.parser(contents)
 
             # get list of links to home details
             for child in self.get_parsable(soup):
+                logging.info(f"found {child} to parse")
                 if self.explored.contains(child):
                     continue
                 self.explored.add(child)
@@ -311,9 +316,11 @@ class Crawler:
             # check if we're at the last page
             # if yes return, else get next page of listings
             if self.stop_test(soup):
+                logging.info("reached last page to crawl")
                 return
 
-            for child in self.get_crawlable(crawl_current):
+            for child in self.get_crawlable(current):
+                logging.info(f"found {child} to crawl next")
                 if self.explored.contains(child):
                     continue
                 self.explored.add(child)

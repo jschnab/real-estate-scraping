@@ -58,6 +58,9 @@ def get_next_page(url):
         next_number = int(group.split("=")[-1]) + 1
         next_url = url[:-len(group)] + f"&p={next_number}"
         return next_url
+    # the first page has no page index
+    else:
+        return url + "&p=2"
 
 
 def get_page_index(soup):

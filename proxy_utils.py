@@ -62,7 +62,7 @@ def format_proxies(proxies):
 def validate_proxies(
     proxies,
     url=VALIDATE_URL,
-    timeout=10,
+    timeout=5,
     max_retries=4,
     backoff_factor=0.3,
     retry_on=[500, 502, 503, 504],
@@ -79,7 +79,6 @@ def validate_proxies(
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
-    return session
 
     # validate proxies by testing a request through them
     validated = []
