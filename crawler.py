@@ -1,11 +1,14 @@
 import hashlib
 import json
 import logging
+import os
 import random
 import time
 
 from collections import deque
+from configparser import ConfigParser
 from functools import partial
+from pathlib import Path
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urljoin
 
@@ -16,6 +19,9 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
 from urllib.error import URLError
+
+CONFIG_DIR = os.path.join(str(Path.home()), ".scraping")
+DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "crawler.conf")
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
@@ -66,7 +72,9 @@ class Crawler:
         backoff_factor=0.3,
         retry_on=[500, 502, 503, 504],
         crawl_delay=0.5,
-        parser=None,
+        html_parser=None,
+        soup_parser=None,
+        config=DEFAULT_CONFIG,
     ):
         """
         Web crawler class.
@@ -100,7 +108,10 @@ class Crawler:
         :param list[int] retry_on: HTTP status codes allowing request retry
         :param float crawl_delay: time in seconds to wait between page
                                   downloads
-        :param parser: class to use for parsing web page contents
+        :param html_parser: tool to use for parsing web page contents
+        :param soup_parser: function to use to parse the HTML tags soup into
+                            a dictionary
+        :param str config: path to the crawler configuration file
         """
         self.base_url = base_url
         self.stop_test = stop_test
@@ -113,11 +124,12 @@ class Crawler:
         self.max_retries = max_retries
         self.backoff_factor = backoff_factor
         self.retry_on = retry_on
+        self.soup_parser = soup_parser
 
-        if not parser:
-            self.parser = partial(BeautifulSoup, features="html.parser")
+        if not html_parser:
+            self.html_parser = partial(BeautifulSoup, features="html.parser")
         else:
-            self.parser = parser
+            self.html_parser = html_parser
 
         # parse the robots.txt file
         try:
@@ -131,9 +143,30 @@ class Crawler:
                 f"to {crawl_delay} seconds")
             self.crawl_delay = crawl_delay
 
+        # apply config
+        if Path(config).exists():
+            self.configure(config)
+        if Path(os.path.join(CONFIG_DIR, "proxies")).exists():
+            self.get_proxies(os.path.join(CONFIG_DIR, "proxies"))
+        if Path(os.path.join(CONFIG_DIR, "headers")).exists():
+            self.get_headers(os.path.join(CONFIG_DIR, "headers"))
+        if Path(os.path.join(CONFIG_DIR, "user_agents")).exists():
+            self.get_user_agents(os.path.join(CONFIG_DIR, "user_agents"))
+
         self.explored = Explored()
         self.to_crawl = deque()
         self.to_parse = deque()
+
+    def configure(self, config_file):
+        """
+        Read and apply the configuration.
+
+        Note: the implementation of this function is still in progress.
+
+        :param str config_file: path to the configuration file
+        """
+        config = ConfigParser()
+        config.read(config_file)
 
     def get_headers(self, file_name):
         """
@@ -254,7 +287,7 @@ class Crawler:
             logging.error(f"too many retries while downloading {url}")
             return
 
-    def crawl_bfs(self, initial=None):
+    def crawl(self, initial=None):
         """
         Crawl the web in a breadth-first search fashion.
 
@@ -325,3 +358,12 @@ class Crawler:
                     continue
                 self.explored.add(child)
                 self.to_crawl.append(child)
+
+        def harvest(self, archive_name):
+            """
+            Download the web pages stored in self.to_parse.
+
+            :param str archive_name: path to the archive file where the
+                                     web pages are stored after download
+            """
+            pass
