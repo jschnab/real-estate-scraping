@@ -12,6 +12,7 @@ logging.basicConfig(
 )
 
 PROXIES_PROVIDER = "https://free-proxy-list.net"
+PROXIES_PROVIDER2 = "https://www.us-proxy.org/"
 VALIDATE_URL = "https://www.google.com"
 
 
@@ -97,7 +98,7 @@ def validate_proxies(
     return validated
 
 
-def collect_proxies(anonymous=True, validate=False, fmt=True):
+def collect_proxies(anonymous=True, validate=True, fmt=False):
     page = download_proxies()
     proxies = get_proxies_from_page(page)
     if anonymous:
