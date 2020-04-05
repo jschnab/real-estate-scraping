@@ -3,3 +3,4 @@ __pycache__
 *.bz2
 *.csv
 *.json
+*.html

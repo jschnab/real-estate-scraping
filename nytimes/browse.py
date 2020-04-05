@@ -117,7 +117,7 @@ def get_listing_id(url):
     :param str url: listing URL
     :return str: listing ID or random string
     """
-    match = re.search(r"\/([\d]+-[A-Z\-]*[\d]+)", url)
+    match = re.search(r"\/([\dA-Z\-]*)$", url)
     if match:
         return match.group(1)
     else:

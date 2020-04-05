@@ -15,7 +15,7 @@ def safety_net(func):
         try:
             return func(*args, **kwargs)
         except Exception:
-            logging.error(f"HTML tag parsing failed with '{func.__name__}'")
+            logging.error(f"html tag parsing failed with '{func.__name__}'")
     return wrapper
 
 
@@ -127,7 +127,7 @@ def get_burrough(soup):
     """
     aside = soup.find("aside")
     spans = aside.find_all("span")
-    return spans[3].text.split()[0].strip(",")
+    return spans[3].text.split(",")[0].strip()
 
 
 @safety_net
@@ -208,7 +208,7 @@ def get_rep_name(soup):
     for s in spans:
         if re.search("representative", s.text, re.IGNORECASE):
             rep_info = s.next_sibling
-            return rep_info.find("span").text
+            return rep_info.find("span").text.strip()
 
 
 @safety_net
@@ -224,7 +224,10 @@ def get_agency_url(soup):
     for s in spans:
         if re.search("representative", s.text, re.IGNORECASE):
             agency_info = s.next_sibling
-            return agency_info.find("a").attrs["href"]
+            try:
+                return agency_info.find("a").attrs["href"].strip()
+            except KeyError:
+                return agency_info.find("a").text.strip()
 
 
 @safety_net
@@ -236,8 +239,10 @@ def get_description(soup):
     :return str: home's description
     """
     about = soup.find("h3")
-    paragraphs = about.parent.find_all("p")
-    return paragraphs[2].text
+    if len(about.parent.find_all("a")) == 0:
+        return about.parent.find_all("p")[0].text
+    if len(about.parent.find_all("a")) == 1:
+        return about.parent.find_all("p")[2].text
 
 
 @safety_net

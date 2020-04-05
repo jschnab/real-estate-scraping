@@ -10,6 +10,7 @@ from collections import deque
 from configparser import ConfigParser
 from functools import partial
 from pathlib import Path
+from urllib.error import URLError
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urljoin
 from zipfile import ZipFile, ZIP_BZIP2
@@ -20,27 +21,24 @@ from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
-from urllib.error import URLError
+
+from tor import TorSession
 
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
 DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "browser.conf")
-
-logging.basicConfig(
-    format="%(asctime)s %(levelname)s %(message)s",
-    level=logging.INFO,
-)
+MAX_TOR_REQ = 50
 
 
 def cut_url(url):
     """
-    If URL is longer than 50 characters, show the last 20.
+    If URL is longer than 50 characters, show the last 45.
     Useful for logging.
 
     :param str url:
     :return str: short URL
     """
     if len(url) > 50:
-        return f"...{url[-20:]}"
+        return f"...{url[-45:]}"
     return url
 
 
@@ -84,11 +82,11 @@ class Browser:
         user_agents=None,
         proxies=None,
         timeout=5,
-        max_retries=8,
+        max_retries=5,
         backoff_factor=0.3,
-        retry_on=[500, 502, 503, 504],
-        browse_delay=0.5,
-        html_parser=None,
+        retry_on=(500, 502, 503, 504),
+        browse_delay=0,
+        html_parser="html.parser",
         soup_parser=None,
         config=DEFAULT_CONFIG,
     ):
@@ -126,7 +124,8 @@ class Browser:
         :param list[int] retry_on: HTTP status codes allowing request retry
         :param float browse_delay: time in seconds to wait between page
                                    downloads
-        :param html_parser: tool to use for parsing web page contents
+        :param str html_parser: parser to use with BeautifulSoup, e.g.
+                                'html.parser', 'lxml', etc
         :param soup_parser: function to use to parse the HTML tags soup into
                             a dictionary
         :param str config: path to the browser configuration file
@@ -144,11 +143,12 @@ class Browser:
         self.backoff_factor = backoff_factor
         self.retry_on = retry_on
         self.soup_parser = soup_parser
+        self.tor_session = None
 
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
         else:
-            self.html_parser = html_parser
+            self.html_parser = partial(BeautifulSoup, features=html_parser)
 
         # parse the robots.txt file
         try:
@@ -191,9 +191,16 @@ class Browser:
         config.read(config_file)
         self.harvest_archive = config["harvest"]["archive_path"]
         self.extract_csv = config["extract"]["csv_path"]
+
         self.csv_header = [
             col.strip() for col in config["extract"]["csv_header"].split(",")
         ]
+
+        logging.basicConfig(
+            format="%(asctime)s %(levelname)s %(message)s",
+            level=logging.INFO,
+            filename=config["logging"]["log_file"],
+            filemode="a")
 
     def get_headers(self, file_name):
         """
@@ -214,6 +221,7 @@ class Browser:
         """
         with open(file_name) as f:
             self.user_agents = json.load(f)
+        self.headers["User-Agent"] = random.choice(self.user_agents)
 
     def get_proxies(self, file_name, fmt=False):
         """
@@ -316,6 +324,63 @@ class Browser:
             logging.error(f"failed to download {cut_url(url)}")
             return
 
+    def get_tor_session(
+        self,
+        max_retries,
+        backoff_factor,
+        retry_on,
+    ):
+        # new IP only after reset_identity() is called and new session is made
+        session = TorSession(password=os.getenv("TOR_PASSWORD"))
+        session.reset_identity()
+        session = TorSession(password=os.getenv("TOR_PASSWORD"))
+
+        retry = Retry(
+            total=max_retries,
+            read=max_retries,
+            connect=max_retries,
+            backoff_factor=backoff_factor,
+            status_forcelist=retry_on,
+        )
+
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
+
+    def download_page_tor(
+        self,
+        url,
+        timeout=None,
+    ):
+        """
+        Download a web page using a Tor session.
+        """
+        # try to use self.tor_session, if self.tor_session does not exist
+        # get a tor session and save it in self.tor_session
+        if not self.tor_session or self.tor_session.used > MAX_TOR_REQ:
+            self.tor_session = self.get_tor_session(
+                max_retries=self.max_retries,
+                backoff_factor=self.backoff_factor,
+                retry_on=self.retry_on,
+            )
+            self.headers = self.choose_headers()
+
+        if not url.startswith(self.base_url):
+            url = urljoin(self.base_url, url)
+
+        try:
+            response = self.to_session.get(
+                url,
+                headers=self.headers,
+                timeout=timeout,
+            )
+            return response.content
+
+        except RequestException:
+            logging.error(f"failed to download {cut_url(url)}")
+            return
+
     def browse(self, initial=None):
         """
         Crawl the web in a breadth-first search fashion.
@@ -344,7 +409,7 @@ class Browser:
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            contents = self.download_page(
+            content = self.download_page(
                 url=current,
                 headers=headers,
                 proxies=proxy,
@@ -355,15 +420,76 @@ class Browser:
 
             # if download failed, push URL back to queue and
             # remove proxy from list
-            if contents is None:
-                logging.info(
-                    f"failed to download, will retry later {cut_url(current)}")
+            if content is None:
                 self.to_browse.appendleft(current)
                 self.proxies.remove(proxy)
                 continue
 
             logging.info("parsing page")
-            soup = self.html_parser(contents)
+            soup = self.html_parser(content)
+
+            # get list of links to home details
+            for child in self.get_parsable(soup):
+                logging.info(f"found to parse: {cut_url(child)}")
+                if self.explored.contains(child):
+                    continue
+                self.explored.add(child)
+                self.to_parse.append(child)
+
+            # check if we're at the last page
+            # if yes return, else get next page of listings
+            if self.stop_test(soup):
+                logging.info("reached last page to browse, stopping")
+                return
+
+            for child in self.get_browsable(current):
+                logging.info(f"found to browse next: {cut_url(child)}")
+                if self.explored.contains(child):
+                    continue
+                self.explored.add(child)
+                self.to_browse.append(child)
+
+    def browse_tor(self, initial=None):
+        """
+        Crawl the web in a breadth-first search fashion using Tor.
+
+        :param str initial: URL where to start browsing (suffix to append
+                            to the base URL)
+        """
+        logging.info("start browsing")
+        if not initial:
+            initial = self.base_url
+
+        self.to_browse.appendleft(initial)
+        self.explored.add(initial)
+
+        while self.to_browse:
+            current = self.to_browse.pop()
+            if not self.can_fetch(self.headers["User-Agent"], current):
+                logging.info(f"forbidden: {cut_url(current)}")
+                continue
+
+            logging.info(f"downloading {cut_url(current)}")
+            content = self.download_page_tor(url=current, timeout=self.timeout)
+            time.sleep(self.browse_delay)
+
+            # if download failed, push URL back to queue and
+            # remove proxy from list
+            if content is None:
+                logging.info(
+                    "pushing URL back into queue, getting new Tor session"
+                )
+                self.to_browse.appendleft(current)
+                self.tor_session = self.get_tor_session(
+                    max_retries=self.max_retries,
+                    backoff_factor=self.backoff_factor,
+                    retry_on=self.retry_on,
+                )
+                self.headers = self.choose_headers()
+                continue
+
+            logging.info("parsing page")
+            soup = self.html_parser(content)
 
             # get list of links to home details
             for child in self.get_parsable(soup):
@@ -424,10 +550,49 @@ class Browser:
             # if download failed, push URL back to queue and
             # remove proxy from list
             if content is None:
-                logging.info(
-                    f"failed to download, will retry later {cut_url(current)}")
                 self.to_parse.appendleft(current)
                 self.proxies.remove(proxy)
+                continue
+
+            logging.info(f"archiving {cut_url(current)}")
+            file_name = self.get_page_id(current)
+            with ZipFile(archive_name, "a", compression=ZIP_BZIP2) as archive:
+                archive.writestr(file_name, content)
+
+    def harvest_tor(self, archive_name=None):
+        """
+        Download the web pages stored in self.to_parse using Tor.
+
+        :param str archive_name: path to the archive file where the
+                                 web pages are stored after download
+        """
+        logging.info("start harvesting")
+        if not archive_name:
+            archive_name = self.harvest_archive
+
+        while self.to_parse:
+            current = self.to_parse.pop()
+            if not self.can_fetch(self.headers["User-Agent"], current):
+                logging.info(f"forbidden: {cut_url(current)}")
+                continue
+
+            logging.info(f"downloading {cut_url(current)}")
+            content = self.download_page_tor(url=current, timeout=self.timeout)
+            time.sleep(self.browse_delay)
+
+            # if download failed, push URL back to queue and
+            # remove proxy from list
+            if content is None:
+                logging.info(
+                    "pushing URL back to queue, getting new Tor session"
+                )
+                self.to_parse.appendleft(current)
+                self.tor_session = self.get_tor_session(
+                    max_retries=self.max_retries,
+                    backoff_factor=self.backoff_factor,
+                    retry_on=self.retry_on,
+                )
+                self.headers = self.choose_headers()
                 continue
 
             logging.info(f"archiving {cut_url(current)}")
@@ -477,4 +642,4 @@ class Browser:
                     nulls = row.count("NULL")
                     if nulls / columns > 0.3:
                         logging.warning(
-                            f"too many null values found in {names[index]}")
+                            f"{nulls} null values in {names[index]}")
