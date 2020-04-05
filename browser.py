@@ -370,7 +370,7 @@ class Browser:
             url = urljoin(self.base_url, url)
 
         try:
-            response = self.to_session.get(
+            response = self.tor_session.get(
                 url,
                 headers=self.headers,
                 timeout=timeout,
