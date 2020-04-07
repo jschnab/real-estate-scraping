@@ -16,15 +16,16 @@ from urllib.robotparser import RobotFileParser
 from urllib.parse import urljoin
 from zipfile import ZipFile, ZIP_BZIP2
 
-import requests
-
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
 
+from tor import TorSession
+
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
 DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "browser.conf")
+MAX_TOR_REQ = 50
 MAX_ARCH_SIZE = 100 * 1000 * 1000
 
 
@@ -299,7 +300,10 @@ class Browser:
         backoff_factor,
         retry_on,
     ):
-        session = requests.Session()
+        # new IP only after reset_identity() is called and new session is made
+        session = TorSession(password=os.getenv("TOR_PASSWORD"))
+        session.reset_identity()
+        session = TorSession(password=os.getenv("TOR_PASSWORD"))
 
         retry = Retry(
             total=max_retries,
@@ -317,26 +321,28 @@ class Browser:
     def download_page(
         self,
         url,
-        session=None,
-        headers=None,
-        proxies=None,
         timeout=None,
     ):
-        if not session:
-            session = self.get_session(
+        """
+        Download a web page using a Tor session.
+        """
+        # try to use self.tor_session, if self.tor_session does not exist
+        # get a tor session and save it in self.tor_session
+        if not self.tor_session or self.tor_session.used > MAX_TOR_REQ:
+            self.tor_session = self.get_session(
                 max_retries=self.max_retries,
                 backoff_factor=self.backoff_factor,
                 retry_on=self.retry_on,
             )
+            self.headers = self.choose_headers()
 
         if not url.startswith(self.base_url):
             url = urljoin(self.base_url, url)
 
         try:
-            response = session.get(
+            response = self.tor_session.get(
                 url,
-                headers=headers,
-                proxies=proxies,
+                headers=self.headers,
                 timeout=timeout,
             )
             return response.content
@@ -347,7 +353,7 @@ class Browser:
 
     def browse(self, initial=None):
         """
-        Crawl the web in a breadth-first search fashion.
+        Crawl the web in a breadth-first search fashion using Tor.
 
         :param str initial: URL where to start browsing (suffix to append
                             to the base URL)
@@ -360,33 +366,28 @@ class Browser:
         self.explored.add(initial)
 
         while self.to_browse:
-            headers = self.choose_headers()
-            try:
-                proxy = self.choose_proxy()
-            except IndexError:
-                logging.error("all proxies have been exhausted, stopping")
-                return
-
             current = self.to_browse.pop()
-            if not self.can_fetch(headers["User-Agent"], current):
-                logging.info("forbidden to browse the current page, skipping")
+            if not self.can_fetch(self.headers["User-Agent"], current):
+                logging.info(f"forbidden: {cut_url(current)}")
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page(
-                url=current,
-                headers=headers,
-                proxies=proxy,
-                timeout=self.timeout,
-            )
-
+            content = self.download_page_tor(url=current, timeout=self.timeout)
             time.sleep(self.browse_delay)
 
             # if download failed, push URL back to queue and
             # remove proxy from list
             if content is None:
+                logging.info(
+                    "pushing URL back into queue, getting new Tor session"
+                )
                 self.to_browse.appendleft(current)
-                self.proxies.remove(proxy)
+                self.tor_session = self.get_session(
+                    max_retries=self.max_retries,
+                    backoff_factor=self.backoff_factor,
+                    retry_on=self.retry_on,
+                )
+                self.headers = self.choose_headers()
                 continue
 
             logging.info("parsing page")
@@ -415,39 +416,32 @@ class Browser:
 
     def harvest(self):
         """
-        Download the web pages stored in self.to_parse.
-
+        Download the web pages stored in self.to_parse using Tor.
         """
         logging.info("start harvesting")
-
         while self.to_parse:
-            headers = self.choose_headers()
-            try:
-                proxy = self.choose_proxy()
-            except IndexError:
-                logging.error("all proxies have been exhausted, stopping")
-                return
-
             current = self.to_parse.pop()
-            if not self.can_fetch(headers["User-Agent"], current):
-                logging.info("forbidden to browse the current page, skipping")
+            if not self.can_fetch(self.headers["User-Agent"], current):
+                logging.info(f"forbidden: {cut_url(current)}")
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page(
-                url=current,
-                headers=headers,
-                proxies=proxy,
-                timeout=self.timeout,
-            )
-
+            content = self.download_page_tor(url=current, timeout=self.timeout)
             time.sleep(self.browse_delay)
 
             # if download failed, push URL back to queue and
             # remove proxy from list
             if content is None:
+                logging.info(
+                    "pushing URL back to queue, getting new Tor session"
+                )
                 self.to_parse.appendleft(current)
-                self.proxies.remove(proxy)
+                self.tor_session = self.get_session(
+                    max_retries=self.max_retries,
+                    backoff_factor=self.backoff_factor,
+                    retry_on=self.retry_on,
+                )
+                self.headers = self.choose_headers()
                 continue
 
             logging.info(f"archiving {cut_url(current)}")
