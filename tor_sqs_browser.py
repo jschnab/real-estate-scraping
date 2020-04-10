@@ -464,8 +464,9 @@ class Browser:
         while True:
             handle, current = self.pop_queue()
             if not current:
-                logging.info("no message received, exiting")
-                break
+                logging.info("no message received, pausing")
+                time.sleep(120)
+                continue
             if not self.can_fetch(self.headers["User-Agent"], current):
                 logging.info(f"forbidden: {cut_url(current)}")
                 self.delete_message(handle)
@@ -481,6 +482,7 @@ class Browser:
                 logging.info(
                     "pushing URL back to queue, getting new Tor session"
                 )
+                self.delete_message(handle)
                 self.push_queue(current)
                 self.tor_session = self.get_session(
                     max_retries=self.max_retries,
