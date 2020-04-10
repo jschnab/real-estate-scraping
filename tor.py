@@ -45,7 +45,7 @@ class TorSession:
             config={
                 "SocksPort": str(self.proxy_port),
                 "ControlPort": str(self.ctrl_port),
-                "ExitNodes": "{us}",
+                "ExitNodes": "{US}",
             },
             take_ownership=True,
         )

@@ -190,7 +190,7 @@ class Browser:
         """
         config = ConfigParser()
         config.read(config_file)
-        self.harvest_dir = config["harvest"]["archive_dir"]
+        self.harvest_dir = config["harvest"]["harvest_dir"]
         self.extract_csv = config["extract"]["csv_path"]
 
         self.csv_header = [
@@ -281,7 +281,7 @@ class Browser:
         :return str: harvest archive name
         """
         archive_name = os.path.join(
-            self.archive_directory,
+            self.harvest_dir,
             f"harvest_{self.archive_count}.bz2"
         )
 
@@ -290,7 +290,7 @@ class Browser:
                 self.archive_acount += 1
 
         return os.path.join(
-            self.archive_directory,
+            self.harvest_dir,
             f"harvest_{self.archive_count}.bz2"
         )
 
@@ -372,7 +372,7 @@ class Browser:
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page_tor(url=current, timeout=self.timeout)
+            content = self.download_page(url=current, timeout=self.timeout)
             time.sleep(self.browse_delay)
 
             # if download failed, push URL back to queue and
@@ -408,7 +408,7 @@ class Browser:
                 return
 
             for child in self.get_browsable(current):
-                logging.info(f"found to browse next: {cut_url(child)}")
+                logging.info(f"found to browse next {cut_url(child)}")
                 if self.explored.contains(child):
                     continue
                 self.explored.add(child)
@@ -426,7 +426,7 @@ class Browser:
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page_tor(url=current, timeout=self.timeout)
+            content = self.download_page(url=current, timeout=self.timeout)
             time.sleep(self.browse_delay)
 
             # if download failed, push URL back to queue and

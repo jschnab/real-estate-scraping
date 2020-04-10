@@ -1,5 +1,4 @@
-import csv
-import glob
+import bz2
 import hashlib
 import json
 import logging
@@ -14,18 +13,19 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urljoin
-from zipfile import ZipFile, ZIP_BZIP2
 
-import requests
+import boto3
 
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
 
+from tor import TorSession
+
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
 DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "browser.conf")
-MAX_ARCH_SIZE = 100 * 1000 * 1000
+MAX_TOR_REQ = 50
 
 
 def cut_url(url):
@@ -143,7 +143,10 @@ class Browser:
         self.retry_on = retry_on
         self.soup_parser = soup_parser
         self.tor_session = None
-        self.archive_count = 1
+        self.to_browse = deque()
+        self.sqs_client = boto3.client("sqs")
+        self.s3_client = boto3.client("s3")
+        self.explored = Explored()
 
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
@@ -175,10 +178,6 @@ class Browser:
         if Path(os.path.join(CONFIG_DIR, "user_agents")).exists():
             self.get_user_agents(os.path.join(CONFIG_DIR, "user_agents"))
 
-        self.explored = Explored()
-        self.to_browse = deque()
-        self.to_parse = deque()
-
     def configure(self, config_file):
         """
         Read and apply the configuration.
@@ -189,7 +188,9 @@ class Browser:
         """
         config = ConfigParser()
         config.read(config_file)
-        self.harvest_dir = config["harvest"]["harvest_dir"]
+        self.sqs_queue = config["sqs"]["queue_url"]
+        self.s3_bucket = config["s3"]["bucket"]
+        self.harvest_key_prefix = config["harvest"]["key_prefix"]
         self.extract_csv = config["extract"]["csv_path"]
 
         self.csv_header = [
@@ -272,25 +273,67 @@ class Browser:
             return self.robot_parser.can_fetch(agent, url)
         return True
 
-    def get_archive_name(self):
+    def push_queue(self, url):
         """
-        Returns the current harvest archive's name. Start with a suffix
-        of '1' and increment when the archive's size > 100MB.
+        Push URL into an SQS queue.
 
-        :return str: harvest archive name
+        :param str url: URL to push to add to the queue
         """
-        archive_name = os.path.join(
-            self.harvest_dir,
-            f"harvest_{self.archive_count}.bz2"
+        hashed_url = hashlib.md5(url.encode()).hexdigest()
+        self.sqs_client.send_message(
+            QueueUrl=self.sqs_queue,
+            MessageBody=url,
+            MessageDeduplicationId=hashed_url,
+            MessageGroupId="1",
         )
 
-        if os.path.exists(archive_name):
-            if os.path.getsize(archive_name) > MAX_ARCH_SIZE:
-                self.archive_acount += 1
+    def pop_queue(self):
+        """
+        Pop URL from an SQS FIFO queue.
 
-        return os.path.join(
-            self.harvest_dir,
-            f"harvest_{self.archive_count}.bz2"
+        :return str: receipt handle of the message (for deletion of the
+                     message)
+        """
+        response = self.sqs_client.receive_message(QueueUrl=self.sqs_queue)
+        if response:
+            messages = response.get("Messages")
+            if messages:
+                # we only receive one message at a time
+                handle = messages[0].get("ReceiptHandle")
+                body = messages[0].get("Body")
+                return handle, body
+        return None, None
+
+    def delete_message(self, receipt_handle):
+        """
+        Delete a processed message from an SQS FIFO queue.
+
+        :param str receipt_handle: from receive_message()
+        """
+        try:
+            self.sqs_client.delete_message(
+                QueueUrl=self.sqs_queue,
+                ReceiptHandle=receipt_handle,
+            )
+        except Exception as e:
+            logging.info(
+                f"failed to delete msg with handle '{receipt_handle}' "
+                f"error: {e}"
+            )
+
+    def store_harvest(self, file_prefix, data):
+        """
+        Stores the data from a web page in a bz2 file and store it in
+        AWS S3.
+
+        :param str file_prefix: name of the compressed file without extension
+        :param bytes data: data to store
+        """
+        compressed = bz2.compress(data)
+        self.s3_client.put_object(
+            Body=compressed,
+            Bucket=self.s3_bucket,
+            Key=f"{self.harvest_key_prefix}/{file_prefix}.bz2",
         )
 
     def get_session(
@@ -299,7 +342,10 @@ class Browser:
         backoff_factor,
         retry_on,
     ):
-        session = requests.Session()
+        # new IP only after reset_identity() is called and new session is made
+        session = TorSession(password=os.getenv("TOR_PASSWORD"))
+        session.reset_identity()
+        session = TorSession(password=os.getenv("TOR_PASSWORD"))
 
         retry = Retry(
             total=max_retries,
@@ -317,26 +363,28 @@ class Browser:
     def download_page(
         self,
         url,
-        session=None,
-        headers=None,
-        proxies=None,
         timeout=None,
     ):
-        if not session:
-            session = self.get_session(
+        """
+        Download a web page using a Tor session.
+        """
+        # try to use self.tor_session, if self.tor_session does not exist
+        # get a tor session and save it in self.tor_session
+        if not self.tor_session or self.tor_session.used > MAX_TOR_REQ:
+            self.tor_session = self.get_session(
                 max_retries=self.max_retries,
                 backoff_factor=self.backoff_factor,
                 retry_on=self.retry_on,
             )
+            self.headers = self.choose_headers()
 
         if not url.startswith(self.base_url):
             url = urljoin(self.base_url, url)
 
         try:
-            response = session.get(
+            response = self.tor_session.get(
                 url,
-                headers=headers,
-                proxies=proxies,
+                headers=self.headers,
                 timeout=timeout,
             )
             return response.content
@@ -347,7 +395,7 @@ class Browser:
 
     def browse(self, initial=None):
         """
-        Crawl the web in a breadth-first search fashion.
+        Crawl the web in a breadth-first search fashion using Tor.
 
         :param str initial: URL where to start browsing (suffix to append
                             to the base URL)
@@ -360,33 +408,28 @@ class Browser:
         self.explored.add(initial)
 
         while self.to_browse:
-            headers = self.choose_headers()
-            try:
-                proxy = self.choose_proxy()
-            except IndexError:
-                logging.error("all proxies have been exhausted, stopping")
-                return
-
             current = self.to_browse.pop()
-            if not self.can_fetch(headers["User-Agent"], current):
-                logging.info("forbidden to browse the current page, skipping")
+            if not self.can_fetch(self.headers["User-Agent"], current):
+                logging.info(f"forbidden: {cut_url(current)}")
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page(
-                url=current,
-                headers=headers,
-                proxies=proxy,
-                timeout=self.timeout,
-            )
-
+            content = self.download_page(url=current, timeout=self.timeout)
             time.sleep(self.browse_delay)
 
             # if download failed, push URL back to queue and
             # remove proxy from list
             if content is None:
+                logging.info(
+                    "pushing URL back into queue, getting new Tor session"
+                )
                 self.to_browse.appendleft(current)
-                self.proxies.remove(proxy)
+                self.tor_session = self.get_session(
+                    max_retries=self.max_retries,
+                    backoff_factor=self.backoff_factor,
+                    retry_on=self.retry_on,
+                )
+                self.headers = self.choose_headers()
                 continue
 
             logging.info("parsing page")
@@ -394,11 +437,11 @@ class Browser:
 
             # get list of links to home details
             for child in self.get_parsable(soup):
-                logging.info(f"found to parse {cut_url(child)}")
+                logging.info(f"found to parse: {cut_url(child)}")
                 if self.explored.contains(child):
                     continue
                 self.explored.add(child)
-                self.to_parse.append(child)
+                self.push_queue(child)
 
             # check if we're at the last page
             # if yes return, else get next page of listings
@@ -415,83 +458,39 @@ class Browser:
 
     def harvest(self):
         """
-        Download the web pages stored in self.to_parse.
-
+        Download the web pages stored in an SQS queue using Tor.
         """
         logging.info("start harvesting")
-
-        while self.to_parse:
-            headers = self.choose_headers()
-            try:
-                proxy = self.choose_proxy()
-            except IndexError:
-                logging.error("all proxies have been exhausted, stopping")
-                return
-
-            current = self.to_parse.pop()
-            if not self.can_fetch(headers["User-Agent"], current):
-                logging.info("forbidden to browse the current page, skipping")
+        while True:
+            handle, current = self.pop_queue()
+            if not current:
+                logging.info("no message received, exiting")
+                break
+            if not self.can_fetch(self.headers["User-Agent"], current):
+                logging.info(f"forbidden: {cut_url(current)}")
+                self.delete_message(handle)
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page(
-                url=current,
-                headers=headers,
-                proxies=proxy,
-                timeout=self.timeout,
-            )
-
+            content = self.download_page(url=current, timeout=self.timeout)
             time.sleep(self.browse_delay)
 
             # if download failed, push URL back to queue and
             # remove proxy from list
             if content is None:
-                self.to_parse.appendleft(current)
-                self.proxies.remove(proxy)
+                logging.info(
+                    "pushing URL back to queue, getting new Tor session"
+                )
+                self.push_queue(current)
+                self.tor_session = self.get_session(
+                    max_retries=self.max_retries,
+                    backoff_factor=self.backoff_factor,
+                    retry_on=self.retry_on,
+                )
+                self.headers = self.choose_headers()
                 continue
 
             logging.info(f"archiving {cut_url(current)}")
-            file_name = self.get_page_id(current)
-            archive_name = self.get_archive_name()
-            with ZipFile(archive_name, "a", compression=ZIP_BZIP2) as archive:
-                archive.writestr(file_name, content)
-
-    def extract(self, csv_name=None, csv_header=None):
-        """
-        Extract data from HTML pages stored in an archive and saves it as a
-        CSV file.
-
-        :param str csv_name: name of the CSV file where to store data
-        :param list[str] csv_header: list of column names for the CSV file
-        """
-        if not csv_name:
-            csv_name = self.extract_csv
-        if not csv_header:
-            csv_header = self.csv_header
-
-        for archive_name in glob.glob("harvest_[0-9]*.bz2"):
-            with ZipFile(archive_name, "r", compression=ZIP_BZIP2) as archive:
-                with open(csv_name, "w") as csv_obj:
-                    writer = csv.DictWriter(
-                        csv_obj,
-                        csv_header,
-                        lineterminator=os.linesep)
-
-                    writer.writeheader()
-
-                    for name in archive.namelist():
-                        logging.info(f"parsing {name}")
-                        content = archive.read(name)
-                        soup = self.html_parser(content)
-                        parsed = self.soup_parser(soup)
-                        writer.writerow(parsed)
-
-                names = archive.namelist()
-                with open(csv_name) as csv_obj:
-                    reader = csv.reader(csv_obj)
-                    columns = len(next(reader))
-                    for index, row in enumerate(reader):
-                        nulls = row.count("NULL")
-                        if nulls / columns > 0.3:
-                            logging.warning(
-                                f"{nulls} null values in {names[index]}")
+            file_prefix = self.get_page_id(current)
+            self.store_harvest(file_prefix, content)
+            self.delete_message(handle)
