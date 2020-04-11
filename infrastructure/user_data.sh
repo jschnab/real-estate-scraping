@@ -30,13 +30,13 @@ systemctl restart tor
 git clone https://github.com/jschnab/real-estate-scraping.git /home/ec2-user/real-estate-scraping
 
 mkdir /home/ec2-user/.aws
-cat << EOT > /home/ec2-user/.aws
+cat << EOT > /home/ec2-user/.aws/config
 [default]
 region = us-east-1
 output = json
 EOT
 
-aws s3 cp --recursive s3://jschnab-test-bucket/rea-estate/browser_config /home/ec2-user/.browsing
+aws s3 cp --recursive s3://jschnab-test-bucket/real-estate/browser_config /home/ec2-user/.browsing
 
 chown -R ec2-user:ec2-user /home/ec2-user/
 

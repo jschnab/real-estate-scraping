@@ -283,8 +283,6 @@ class Browser:
         self.sqs_client.send_message(
             QueueUrl=self.sqs_queue,
             MessageBody=url,
-            MessageDeduplicationId=hashed_url,
-            MessageGroupId="1",
         )
 
     def pop_queue(self):
