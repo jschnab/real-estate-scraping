@@ -24,7 +24,7 @@ ControlPort 9051
 CookieAuthentication 1
 EOT
 
-echo "export TOR_PASSWORD=$TOR_PASSWORD" >> /home/ec2-user/.browsing/vars.conf
+echo "export TOR_PASSWORD=$TOR_PASSWORD" > /home/ec2-user/.browsing/vars.conf
 echo "HashedControlPassword $(tor --hash-password "$TOR_PASSWORD" | grep --color=never 16:[A-Z0-9])" >> /etc/tor/torrc
 systemctl restart tor
 
