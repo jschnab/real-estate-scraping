@@ -26,6 +26,8 @@ from tor import TorSession
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
 DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "browser.conf")
 MAX_TOR_REQ = 50
+HARVEST_PAUSE_BACKOFF = 0.3
+HARVEST_PAUSE_MAX = 60 * 30  # 30 minutes
 
 
 def cut_url(url):
@@ -147,6 +149,7 @@ class Browser:
         self.sqs_client = boto3.client("sqs")
         self.s3_client = boto3.client("s3")
         self.explored = Explored()
+        self.havest_pauses = 0
 
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
@@ -319,6 +322,18 @@ class Browser:
                 f"error: {e}"
             )
 
+    def pause_harvest(self):
+        """
+        Pause during harvest if no message is returned from the queue.
+        Pause times increase exponentially until a defined maximum is reached.
+        """
+        duration = min(
+            HARVEST_PAUSE_BACKOFF * 2 ** self.harvest_pauses,
+            HARVEST_PAUSE_MAX
+        )
+        time.sleep(duration)
+        self.harvest_pauses += 1
+
     def store_harvest(self, file_prefix, data):
         """
         Stores the data from a web page in a bz2 file and store it in
@@ -464,8 +479,9 @@ class Browser:
             handle, current = self.pop_queue()
             if not current:
                 logging.info("no message received, pausing")
-                time.sleep(120)
+                self.pause_harvest()
                 continue
+            self.harvest_pauses = 0
             if not self.can_fetch(self.headers["User-Agent"], current):
                 logging.info(f"forbidden: {cut_url(current)}")
                 self.delete_message(handle)

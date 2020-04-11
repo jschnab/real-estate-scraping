@@ -27,8 +27,6 @@ echo "export TOR_PASSWORD=$TOR_PASSWORD" >> /home/ec2-user/.bashrc
 echo "HashedControlPassword $(tor --hash-password "$TOR_PASSWORD" | grep --color=never 16:[A-Z0-9])" >> /etc/tor/torrc
 systemctl restart tor
 
-git clone https://github.com/jschnab/real-estate-scraping.git /home/ec2-user/real-estate-scraping
-
 mkdir /home/ec2-user/.aws
 cat << EOT > /home/ec2-user/.aws/config
 [default]
@@ -36,9 +34,31 @@ region = us-east-1
 output = json
 EOT
 
+git clone https://github.com/jschnab/real-estate-scraping.git /home/ec2-user/real-estate-scraping
 aws s3 cp --recursive s3://jschnab-test-bucket/real-estate/browser_config /home/ec2-user/.browsing
 
 chown -R ec2-user:ec2-user /home/ec2-user/
+
+cat << EOF > /etc/systemd/system/harvest_re.service
+[Unit]
+Description=Automated web browser for real estate
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+ExecStart=/usr/bin/python3 /home/ec2-user/real-estate-scraping/test.py harvest
+Restart=always
+TimeoutStartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable harvest_re.service
+systemctl start harvest_re.service
 
 date "+%Y-%m-%d %H:%M:%S"
 ENDTIME=$(date +%s)
