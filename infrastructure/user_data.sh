@@ -8,6 +8,9 @@ echo BEGIN
 BEGINTIME=$(date +%s)
 date "+%Y-%m-%d %H:%M:%S"
 
+TOR_PASSWORD=
+S3_BUCKET=
+
 yum update -y
 amazon-linux-extras install -y epel
 yum-config-manager --enable epel*
@@ -15,15 +18,13 @@ yum install -y git python3 gcc postgresql-devel python3-devel.x86_64 tor
 
 pip3 install bs4 torrequest awscli boto3
 
-TOR_PASSWORD=ind*Ica69
-
 cat << EOT > /etc/tor/torrc
 SOCKSPort 9050
 ControlPort 9051
 CookieAuthentication 1
 EOT
 
-echo "export TOR_PASSWORD=$TOR_PASSWORD" >> /home/ec2-user/.bashrc
+echo "export TOR_PASSWORD=$TOR_PASSWORD" >> /home/ec2-user/.browsing/vars.conf
 echo "HashedControlPassword $(tor --hash-password "$TOR_PASSWORD" | grep --color=never 16:[A-Z0-9])" >> /etc/tor/torrc
 systemctl restart tor
 
@@ -35,7 +36,7 @@ output = json
 EOT
 
 git clone https://github.com/jschnab/real-estate-scraping.git /home/ec2-user/real-estate-scraping
-aws s3 cp --recursive s3://jschnab-test-bucket/real-estate/browser_config /home/ec2-user/.browsing
+aws s3 cp --recursive s3://"$S3_BUCKET"/real-estate/browser_config /home/ec2-user/.browsing
 
 chown -R ec2-user:ec2-user /home/ec2-user/
 
@@ -46,6 +47,7 @@ After=network.target
 
 [Service]
 Type=simple
+EnvironmentFile=/home/ec2-user/.browsing/vars.conf
 User=ec2-user
 Group=ec2-user
 ExecStart=/usr/bin/python3 /home/ec2-user/real-estate-scraping/test.py harvest
