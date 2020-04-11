@@ -142,7 +142,7 @@ class Browser:
         self.backoff_factor = backoff_factor
         self.retry_on = retry_on
         self.soup_parser = soup_parser
-        self.tor_session = None
+        self.session = None
         self.to_browse = deque()
         self.sqs_client = boto3.client("sqs")
         self.s3_client = boto3.client("s3")
@@ -366,10 +366,11 @@ class Browser:
         """
         Download a web page using a Tor session.
         """
-        # try to use self.tor_session, if self.tor_session does not exist
-        # get a tor session and save it in self.tor_session
-        if not self.tor_session or self.tor_session.used > MAX_TOR_REQ:
-            self.tor_session = self.get_session(
+        # try to use self.session, if self.session does not exist
+        # get a tor session and save it in self.session
+        if not self.session or self.session.used > MAX_TOR_REQ:
+            logging.info("getting a new Tor session")
+            self.session = self.get_session(
                 max_retries=self.max_retries,
                 backoff_factor=self.backoff_factor,
                 retry_on=self.retry_on,
@@ -380,7 +381,7 @@ class Browser:
             url = urljoin(self.base_url, url)
 
         try:
-            response = self.tor_session.get(
+            response = self.session.get(
                 url,
                 headers=self.headers,
                 timeout=timeout,
@@ -422,7 +423,7 @@ class Browser:
                     "pushing URL back into queue, getting new Tor session"
                 )
                 self.to_browse.appendleft(current)
-                self.tor_session = self.get_session(
+                self.session = self.get_session(
                     max_retries=self.max_retries,
                     backoff_factor=self.backoff_factor,
                     retry_on=self.retry_on,
@@ -482,7 +483,7 @@ class Browser:
                 )
                 self.delete_message(handle)
                 self.push_queue(current)
-                self.tor_session = self.get_session(
+                self.session = self.get_session(
                     max_retries=self.max_retries,
                     backoff_factor=self.backoff_factor,
                     retry_on=self.retry_on,
@@ -490,7 +491,7 @@ class Browser:
                 self.headers = self.choose_headers()
                 continue
 
-            logging.info(f"archiving {cut_url(current)}")
             file_prefix = self.get_page_id(current)
+            logging.info(f"archiving {file_prefix}")
             self.store_harvest(file_prefix, content)
             self.delete_message(handle)
