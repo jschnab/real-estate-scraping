@@ -10,6 +10,7 @@ import time
 
 from collections import deque
 from configparser import ConfigParser
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -348,11 +349,12 @@ class Browser:
         :param str file_prefix: name of the compressed file without extension
         :param bytes data: data to store
         """
+        date = datetime.now().strftime("%Y/%m/%d")
         compressed = bz2.compress(data)
         self.s3_client.put_object(
             Body=compressed,
             Bucket=self.s3_bucket,
-            Key=f"{self.harvest_key_prefix}/{file_prefix}.bz2",
+            Key=f"{self.harvest_key_prefix}/{date}/{file_prefix}.bz2",
         )
 
     def get_session(
