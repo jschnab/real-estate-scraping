@@ -543,9 +543,9 @@ class Browser:
                 writer.writeheader()
 
                 file_names = []
-                for f in glob.glob(f"temp_dir/*.bz2"):
+                for f in glob.glob(f"{temp_dir}/*.bz2"):
                     logging.info(f"parsing {f}")
-                    file_names.append(os.pathsplitext(f)[0])
+                    file_names.append(os.path.splitext(f)[0])
                     with bz2.open(f, "rb") as zip_file:
                         data = zip_file.read()
                         soup = self.html_parser(data)

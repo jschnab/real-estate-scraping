@@ -24,7 +24,8 @@ def list_objects(bucket, prefix):
         for obj in contents:
             key = obj.get("Key")
             if key[-1] != "/":
-                keys.append(key)
+                keys += key,
+        token = response.get("NextContinuationToken")
     return keys
 
 
