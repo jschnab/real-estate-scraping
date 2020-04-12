@@ -1,4 +1,6 @@
 import bz2
+import csv
+import glob
 import hashlib
 import json
 import logging
@@ -10,6 +12,7 @@ from collections import deque
 from configparser import ConfigParser
 from functools import partial
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.error import URLError
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urljoin
@@ -21,6 +24,7 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
 
+from aws_utils import s3
 from tor import TorSession
 
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
@@ -90,6 +94,7 @@ class Browser:
         html_parser="html.parser",
         soup_parser=None,
         config=DEFAULT_CONFIG,
+        extract_s3_key="extract.csv",
     ):
         """
         Automated web browser.
@@ -150,6 +155,7 @@ class Browser:
         self.s3_client = boto3.client("s3")
         self.explored = Explored()
         self.havest_pauses = 0
+        self.extract_s3_key = extract_s3_key
 
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
@@ -195,6 +201,7 @@ class Browser:
         self.s3_bucket = config["s3"]["bucket"]
         self.harvest_key_prefix = config["harvest"]["key_prefix"]
         self.extract_csv = config["extract"]["csv_path"]
+        self.extract_key_prefix = config["extract"]["key_prefix"]
 
         self.csv_header = [
             col.strip() for col in config["extract"]["csv_header"].split(",")
@@ -282,7 +289,6 @@ class Browser:
 
         :param str url: URL to push to add to the queue
         """
-        hashed_url = hashlib.md5(url.encode()).hexdigest()
         self.sqs_client.send_message(
             QueueUrl=self.sqs_queue,
             MessageBody=url,
@@ -511,3 +517,55 @@ class Browser:
             logging.info(f"archiving {file_prefix}")
             self.store_harvest(file_prefix, content)
             self.delete_message(handle)
+
+    def extract(self):
+        """
+        Parse HTML code from web pages to extract information and store as a
+        CSV file.
+        HTML is processed according to the function passed in 'html_parser' and
+        data is extracted according to the function passed in 'soup_parser'.
+        """
+        with TemporaryDirectory() as temp_dir:
+            logging.info(f"downloading files to {temp_dir}")
+            s3.download_files(
+                self.s3_bucket,
+                self.harvest_key_prefix,
+                temp_dir,
+            )
+
+            csv_path = os.path.join(temp_dir, self.extract_s3_key)
+            with open(csv_path, "w") as csv_file:
+                writer = csv.DictWriter(
+                    csv_file,
+                    self.csv_header,
+                    lineterminator=os.linesep,
+                )
+                writer.writeheader()
+
+                file_names = []
+                for f in glob.glob(f"temp_dir/*.bz2"):
+                    logging.info(f"parsing {f}")
+                    file_names.append(os.pathsplitext(f)[0])
+                    with bz2.open(f, "rb") as zip_file:
+                        data = zip_file.read()
+                        soup = self.html_parser(data)
+                        parsed = self.soup_parser(soup)
+                        writer.writerow(parsed)
+
+            # check how fields are empty on each row
+            with open(csv_path) as csv_file:
+                reader = csv.reader(csv_file)
+                columns = len(next(reader))
+                for index, row in enumerate(reader):
+                    nulls = row.count("NULL")
+                    if nulls / columns > 0.3:
+                        logging.warning(
+                            f"{nulls} null values in {file_names[index]}"
+                        )
+
+            client = boto3.client("s3")
+            client.upload_file(
+                csv_path,
+                self.s3_bucket,
+                os.path.join(self.extract_key_prefix, self.extract_s3_key),
+            )
