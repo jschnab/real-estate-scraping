@@ -542,15 +542,17 @@ class Browser:
                 )
                 writer.writeheader()
 
+                # iterate over HTML documents, extract data and write to CSV
                 file_names = []
                 for f in glob.glob(f"{temp_dir}/*.bz2"):
                     logging.info(f"parsing {f}")
                     file_names.append(os.path.splitext(f)[0])
                     with bz2.open(f, "rb") as zip_file:
-                        data = zip_file.read()
-                        soup = self.html_parser(data)
-                        parsed = self.soup_parser(soup)
-                        writer.writerow(parsed)
+                        writer.writerow(
+                            self.soup_parser(
+                                self.html_parser(zip_file.read())
+                            )
+                        )
 
             # check how fields are empty on each row
             with open(csv_path) as csv_file:
@@ -563,9 +565,17 @@ class Browser:
                             f"{nulls} null values in {file_names[index]}"
                         )
 
+            # upload CSV file to S3
+            csv_s3_key = os.path.join(
+                self.extract_key_prefix,
+                self.extract_s3_key
+            )
+            logging.info(f"uploading data to {self.s3_bucket}/{csv_s3_key}")
             client = boto3.client("s3")
             client.upload_file(
                 csv_path,
                 self.s3_bucket,
-                os.path.join(self.extract_key_prefix, self.extract_s3_key),
+                csv_s3_key,
             )
+
+        logging.info("extraction finished")
