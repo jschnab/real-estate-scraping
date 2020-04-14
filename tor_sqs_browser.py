@@ -160,9 +160,7 @@ class Browser:
         self.explored = Explored()
         self.havest_pauses = 0
         self.extract_s3_key = extract_s3_key
-        self.harvest_date = datetime.strptime(
-            harvest_date, "%Y%m%d").strftime("%Y/%m/%d")
-
+        self.harvest_date = self.set_harvest_date(harvest_date)
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
         else:
@@ -192,6 +190,17 @@ class Browser:
             self.get_headers(os.path.join(CONFIG_DIR, "headers"))
         if Path(os.path.join(CONFIG_DIR, "user_agents")).exists():
             self.get_user_agents(os.path.join(CONFIG_DIR, "user_agents"))
+
+    def set_harvest_date(self, date):
+        """
+        Set the harvest date.
+
+        :param str date: format YYYYMMDD, or None to set to today's date
+        :return str: format YYYY/MM/DD
+        """
+        if not date:
+            return datetime.utcnow().strftime("%Y/%m/%d")
+        return datetime.strptime(date, "%Y%m%d").strftime("%Y/%m/%d")
 
     def configure(self, config_file):
         """
