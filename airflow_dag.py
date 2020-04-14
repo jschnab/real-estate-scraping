@@ -1,8 +1,10 @@
 import time
 
+import boto3
+
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-import boto3
+from airflow.utils.dates import days_ago
 
 from nytimes.browse import *
 from nytimes.parse_soup import *
@@ -43,6 +45,7 @@ def extract():
 
 default_args = {
     "depends_on_past": False,
+    "start_date": days_ago(1),
 }
 
 dag = DAG(

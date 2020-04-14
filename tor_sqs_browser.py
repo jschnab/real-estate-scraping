@@ -96,6 +96,7 @@ class Browser:
         soup_parser=None,
         config=DEFAULT_CONFIG,
         extract_s3_key="extract.csv",
+        harvest_date=None,
     ):
         """
         Automated web browser.
@@ -136,6 +137,8 @@ class Browser:
         :param soup_parser: function to use to parse the HTML tags soup into
                             a dictionary
         :param str config: path to the browser configuration file
+        :param str extract_s3_key: name of the CSV file to store to S3
+        :param str harvest_date: date of harvest, format YYYYMMDD
         """
         self.base_url = base_url
         self.stop_test = stop_test
@@ -157,6 +160,8 @@ class Browser:
         self.explored = Explored()
         self.havest_pauses = 0
         self.extract_s3_key = extract_s3_key
+        self.harvest_date = datetime.strptime(
+            harvest_date, "%Y%m%d").strftime("%Y/%m/%d")
 
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
@@ -349,12 +354,12 @@ class Browser:
         :param str file_prefix: name of the compressed file without extension
         :param bytes data: data to store
         """
-        date = datetime.now().strftime("%Y/%m/%d")
         compressed = bz2.compress(data)
+        k = f"{self.harvest_key_prefix}/{self.harvest_date}/{file_prefix}.bz2"
         self.s3_client.put_object(
             Body=compressed,
             Bucket=self.s3_bucket,
-            Key=f"{self.harvest_key_prefix}/{date}/{file_prefix}.bz2",
+            Key=k,
         )
 
     def get_session(
@@ -531,7 +536,7 @@ class Browser:
             logging.info(f"downloading files to {temp_dir}")
             s3.download_files(
                 self.s3_bucket,
-                self.harvest_key_prefix,
+                f"{self.harvest_key_prefix}/{self.harvest_date}",
                 temp_dir,
             )
 
@@ -570,6 +575,7 @@ class Browser:
             # upload CSV file to S3
             csv_s3_key = os.path.join(
                 self.extract_key_prefix,
+                self.harvest_date,
                 self.extract_s3_key
             )
             logging.info(f"uploading data to {self.s3_bucket}/{csv_s3_key}")
