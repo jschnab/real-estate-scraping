@@ -7,6 +7,7 @@ from pathlib import Path
 from time import time
 
 import psycopg2
+import psycopg2.extras
 import requests
 
 from geopy.geocoders import Nominatim
@@ -53,41 +54,41 @@ def get_connection(autocommit=False):
     return con
 
 
-def check_cache(postcode, city, address, connection):
+def check_cache(zipcode, city, address, connection):
     """
     Check if the address is in the geolocation cache.
 
-    :param str postcode:
+    :param str zipcode:
     :param str city:
     :param str address:
     :param connection: connection object to the database
     :return bool: True if the address is cached, else False
     """
     cur = connection.cursor()
-    cur.execute(CHECK_CACHE_SQL, (postcode, city, address))
+    cur.execute(CHECK_CACHE_SQL, (zipcode, city, address))
     return cur.fetchone()[0]
 
 
-def query_cache(postcode, city, address, connection):
+def query_cache(zipcode, city, address, connection):
     """
     Query an address from the geolocation cache.
 
-    :param str postcode:
+    :param str zipcode:
     :param str city:
     :param str address:
     :param connection: connection object to the database
-    :return tuple: (lat, lon) for the address
+    :return tuple: (latitude, longitude) for the address
     """
-    cur = connection.cursor()
-    cur.execute(QUERY_CACHE_SQL, (postcode, city, address))
+    cur = connection.cursor(cursor_factory=psycopg2.extract.DictCursor)
+    cur.execute(QUERY_CACHE_SQL, (zipcode, city, address))
     return cur.fetchone()
 
 
-def insert_cache(postcode, city, address, lat, lon, connection):
+def insert_cache(zipcode, city, address, lat, lon, connection):
     """
     Insert an address and its coordinates in the cache.
 
-    :param str postcode:
+    :param str zipcode:
     :param str city:
     :param str address:
     :param float lat: latitude of the address
@@ -96,7 +97,7 @@ def insert_cache(postcode, city, address, lat, lon, connection):
     :return bool: True if the address is cached, else False
     """
     cur = connection.cursor()
-    cur.execute(INSERT_CACHE_SQL, (postcode, city, address, lat, lon))
+    cur.execute(INSERT_CACHE_SQL, (zipcode, city, address, lat, lon))
 
 
 def get_session(
@@ -145,7 +146,7 @@ def parse_bing(response):
 
 
 def query_bing_maps(
-    postcode,
+    zipcode,
     city,
     address,
     key,
@@ -159,7 +160,7 @@ def query_bing_maps(
 
     Parameters will have their spaces replaced by '%20'.
 
-    :param str postcode:
+    :param str zipcode:
     :param str city:
     :param str address:
     :param str key: API key for authentication
@@ -170,7 +171,7 @@ def query_bing_maps(
         session = get_session()
     try:
         url = BING_URL.format(
-            postcode,
+            zipcode,
             city,
             address,
             key,
@@ -182,18 +183,18 @@ def query_bing_maps(
         return float("nan"), float("nan")
 
 
-def query_nominatim(postcode, city, address, *args, **kwargs):
+def query_nominatim(zipcode, city, address, *args, **kwargs):
     """
     Query the OpenStreetMap geocoding service and return unformatted results.
 
-    :param str postcode:
+    :param str zipcode:
     :param str city:
     :param str address:
     :param session: requests session
     :return dict: BingMaps API response
     """
-    locator = Nominatim(user_agent="python", timeout=3)
-    query = f"{address.split('unit')[0]} {postcode} {city}"
+    locator = Nominatim(user_agent="real-estate-browsing", timeout=3)
+    query = f"{address} {zipcode} {city}"
     try:
         location = locator.geocode(query)
         return location.latitude, location.longitude
@@ -205,19 +206,19 @@ def add_coordinates(
     input_csv,
     output_csv,
     columns,
-    api_key,
     geocode,
+    api_key=None,
 ):
     """
     Copy a CSV file and add geolocation coordinates from the address.
 
-    :param str input_csv: CSV file containing only the address
-    :param str output_csv: CSV file with added latitude and longitude
+    :param str input_csv: name of CSV file containing only the address
+    :param str output_csv: name of CSV file with added latitude and longitude
     :param list[str] columns: columns of the output CSV file
-    :param str api_key: API key for the geocoding API
-    :param callable geocode: function which accepts a postcode, a city,
+    :param callable geocode: function which accepts a zipcode, a city,
                              an address, *args and *kwargs and returns
                              a tuple of latitude and longitude
+    :param str api_key: API key for the geocoding API
     """
     start = time()
     with open(input_csv) as infile:
@@ -231,24 +232,24 @@ def add_coordinates(
             )
             writer.writeheader()
 
-            for index, row in enumerate(reader):
-                postcode = row["zip"]
+            for row in reader:
+                zipcode = row["zip"]
                 city = row["burrough"]
-                address = row["address"]
+                address = row["address"].split("unit")[0]
                 with get_connection() as con:
-                    cached = query_cache(postcode, city, address, con)
-                    if not cached:
-                        lat, lon = geocode(postcode, city, address, api_key)
+                    cached = query_cache(zipcode, city, address, con)
+                    if cached:
+                        lat, lon = cached["latitude"], cached["longitude"]
+                    else:
+                        lat, lon = geocode(zipcode, city, address, api_key)
                         insert_cache(
-                            postcode,
+                            zipcode,
                             city,
                             address,
                             lat,
                             lon,
                             con,
                         )
-                    else:
-                        lat, lon = cached[0], cached[1]
                 if math.isnan(lat):
                     lat = "NULL"
                 if math.isnan(lon):

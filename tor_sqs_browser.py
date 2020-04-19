@@ -545,8 +545,7 @@ class Browser:
             logging.info(f"downloading files to {temp_dir}")
             s3.download_files(
                 self.s3_bucket,
-                #f"{self.harvest_key_prefix}/{self.harvest_date}",
-                self.harvest_key_prefix,
+                f"{self.harvest_key_prefix}/{self.harvest_date}",
                 temp_dir,
             )
 
