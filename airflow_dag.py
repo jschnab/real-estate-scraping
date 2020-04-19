@@ -31,7 +31,7 @@ def wait_queue_empty():
         time.sleep(600)
 
 
-def extract():
+def extract(**context):
     crawler = Browser(
         base_url="https://www.nytimes.com",
         stop_test=is_last_page,
@@ -39,6 +39,7 @@ def extract():
         get_parsable=get_listings,
         get_page_id=get_listing_id,
         soup_parser=parse_webpage,
+        harvest_date=context["ds_nodash"]
     )
     crawler.extract()
 
@@ -69,6 +70,7 @@ wait_task = PythonOperator(
 extract_task = PythonOperator(
     task_id="extract",
     python_callable=extract,
+    provide_context=True,
     dag=dag,
 )
 

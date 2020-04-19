@@ -13,6 +13,7 @@ def main():
         get_browsable=wrapper_next_page,
         get_parsable=get_listings,
         get_page_id=get_listing_id,
+        soup_parser=parse_webpage,
     )
     if sys.argv[1] == "browse":
         crawler.browse(BEGIN_RENT_LISTINGS)

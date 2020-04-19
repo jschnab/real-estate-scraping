@@ -16,7 +16,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.error import URLError
 from urllib.robotparser import RobotFileParser
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import boto3
 
@@ -545,7 +545,8 @@ class Browser:
             logging.info(f"downloading files to {temp_dir}")
             s3.download_files(
                 self.s3_bucket,
-                f"{self.harvest_key_prefix}/{self.harvest_date}",
+                #f"{self.harvest_key_prefix}/{self.harvest_date}",
+                self.harvest_key_prefix,
                 temp_dir,
             )
 
@@ -562,13 +563,17 @@ class Browser:
                 file_names = []
                 for f in glob.glob(f"{temp_dir}/*.bz2"):
                     logging.info(f"parsing {f}")
-                    file_names += os.path.splitext(f)[0],
+                    listing_id = os.path.split(os.path.splitext(f)[0])[-1]
+                    file_names += listing_id,
                     with bz2.open(f, "rb") as zip_file:
-                        writer.writerow(
-                            self.soup_parser(
+                        writer.writerow({
+                            **self.soup_parser(
                                 self.html_parser(zip_file.read())
-                            )
-                        )
+                            ),
+                            "listing_id": listing_id,
+                            "source": urlparse(self.base_url).netloc,
+                            "collection_date": self.harvest_date,
+                        })
 
             # check how fields are empty on each row
             with open(csv_path) as csv_file:
