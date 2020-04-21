@@ -21,6 +21,7 @@ from sql_commands import (
 
 YELP_URL = "https://api.yelp.com/v3/businesses/search"
 YELP_CATEGORIES = ["buses", "metrostations", "grocery", "pharmacy"]
+MAX_AGE = 60
 
 HOME = str(Path.home())
 CONFIG_FILE = os.path.join(HOME, ".browsing", "browser.conf")
@@ -138,7 +139,9 @@ def query_yelp(
         "categories": categories,
     }
     try:
-        response = requests.get(url, params=params, headers=headers)
+        response = session.get(url, params=params, headers=headers)
+        if response.status_code == 429:
+            return "too many requests"
         response.raise_for_status()
         return response.json()
     except RequestException as e:
@@ -159,14 +162,19 @@ def get_number_businesses(
     per category.
     """
     results = dict(zip(categories, [0] * len(categories)))
-    businesses = query_yelp(
+    data = query_yelp(
         latitude,
         longitude,
         radius=radius,
         categories=categories,
         api_key=api_key,
         session=session,
-    ).get("businesses", [])
+    )
+
+    if data == "too many requests" or data is None:
+        return dict(zip(categories, ["NULL"] * len(categories)))
+
+    businesses = data.get("businesses", [])
     for business in businesses:
         names = [v for d in business["categories"] for k, v in d.items()]
         for cat in categories:
@@ -175,12 +183,12 @@ def get_number_businesses(
     return results
 
 
-def get_past_businesses(zipcode, city, address, connection=None):
+def get_past_businesses(zipcode, burrough, address, connection=None):
     """
     Get the number of businesses previously recorded around an address.
 
     :param str zipcode:
-    :param str city:
+    :param str burrough:
     :param str address:
     :param connection: connection object to the database
     :return dict: dictionary where keys are Yelp categories and values are
@@ -189,7 +197,7 @@ def get_past_businesses(zipcode, city, address, connection=None):
     if not connection:
         connection = get_connection()
     cur = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute(GET_PAST_BUSINESS_SQL, (zipcode, city, address))
+    cur.execute(GET_PAST_BUSINESS_SQL, (zipcode, burrough, address))
     return cur.fetchone()
 
 
@@ -198,7 +206,7 @@ def add_yelp_annotation(
     output_csv,
     columns,
     api_key=None,
-    max_age=30,
+    max_age=MAX_AGE,
 ):
     """
     Copy a CSV file and add geolocation coordinates from the address.
@@ -225,36 +233,44 @@ def add_yelp_annotation(
             session = get_session()
 
             for row in reader:
-                zipcode = row["zipcode"]
-                city = row["city"]
+                zipcode = row["zip"]
+                burrough = row["burrough"]
                 address = row["address"]
                 latitude = row["latitude"]
                 longitude = row["longitude"]
 
-                with get_connection() as con:
-                    businesses = get_past_businesses(
-                        zipcode,
-                        city,
-                        address,
-                        con,
-                    )
-                    # discard results if they are too old
-                    collection_date = businesses["collection_date"]
-                    if (date.today() - collection_date).days > max_age:
-                        businesses = None
+                if latitude == "NULL" or longitude == "NULL":
+                    row["metrostations"] = "NULL"
+                    row["buses"] = "NULL"
+                    row["grocery"] = "NULL"
+                    row["pharmacy"] = "NULL"
 
-                if not businesses:
+                else:
+                #with get_connection() as con:
+                #    businesses = get_past_businesses(
+                #        zipcode,
+                #        burrough,
+                #        address,
+                #        con,
+                #    )
+                #    # discard results if they are too old
+                #    if businesses:
+                #        collection_date = businesses["collection_date"]
+                #        if (date.today() - collection_date).days > max_age:
+                #            businesses = None
+
+               # if not businesses:
                     businesses = get_number_businesses(
                         latitude,
                         longitude,
-                        api_key,
+                        api_key=api_key,
                         session=session,
                     )
+                    row["metrostations"] = businesses["metrostations"]
+                    row["buses"] = businesses["buses"]
+                    row["grocery"] = businesses["grocery"]
+                    row["pharmacy"] = businesses["pharmacy"]
 
-                row["metrostations"] = businesses["metrostations"]
-                row["buses"] = businesses["buses"]
-                row["grocery"] = businesses["grocery"]
-                row["pharmacy"] = businesses["pharmacy"]
                 writer.writerow(row)
 
     stop = time()

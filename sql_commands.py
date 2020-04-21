@@ -1,7 +1,7 @@
 CREATE_CACHE_SQL = """
 CREATE TABLE geocache (
     zip VARCHAR,
-    city VARCHAR,
+    burrough VARCHAR,
     address VARCHAR,
     latitude NUMERIC(8, 5),
     longitude NUMERIC(8, 5)
@@ -12,18 +12,18 @@ SELECT EXISTS (
     SELECT 1
     FROM geocache
     WHERE zip = %s
-    AND city = %s
+    AND burrough = %s
     AND address = %s
 );"""
 
 INSERT_CACHE_SQL = """
-INSERT INTO geocache (zip, city, address, latitude, longitude)
+INSERT INTO geocache (zip, burrough, address, latitude, longitude)
 VALUES (%s, %s, %s, %s, %s);"""
 
 QUERY_CACHE_SQL = """
 SELECT latitude, longitude
 FROM geocache
-WHERE zip = %s AND city = %s AND address = %s;"""
+WHERE zip = %s AND burrough = %s AND address = %s;"""
 
 CREATE_TABLE_RENTALS_SQL = """
 CREATE TABLE rentals (
@@ -31,6 +31,7 @@ CREATE TABLE rentals (
     property_type VARCHAR,
     burrough VARCHAR,
     neighborhood VARCHAR,
+    address VARCHAR,
     zip VARCHAR,
     price NUMERIC(9, 2),
     description VARCHAR,
@@ -51,17 +52,27 @@ CREATE TABLE rentals (
     collection_date DATE,
     latitude NUMERIC(8, 5),
     longitude NUMERIC(8, 5),
-    metro_stations INTEGER,
-    bus_stations INTEGER,
-    groceries INTEGER
-    pharmacies INTEGER,
+    metrostations INTEGER,
+    buses INTEGER,
+    grocery INTEGER,
+    pharmacy INTEGER
 );"""
 
 GET_PAST_BUSINESS_SQL = """
 SELECT metrostations, buses, grocery, pharmacy, collection_date
 FROM rentals
 WHERE zip = %s
-AND city = %s
+AND burrough = %s
 AND address = %s
 ORDER BY collection_date DESC
 LIMIT 1;"""
+
+COPY_FROM_SQL = """
+COPY {table_name}
+FROM %s
+csv
+DELIMITER %s
+NULL %s
+{header}
+QUOTE %s
+ENCODING %s;"""

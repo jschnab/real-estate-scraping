@@ -54,42 +54,42 @@ def get_connection(autocommit=False):
     return con
 
 
-def check_cache(zipcode, city, address, connection):
+def check_cache(zipcode, burrough, address, connection):
     """
     Check if the address is in the geolocation cache.
 
     :param str zipcode:
-    :param str city:
+    :param str burrough:
     :param str address:
     :param connection: connection object to the database
     :return bool: True if the address is cached, else False
     """
     cur = connection.cursor()
-    cur.execute(CHECK_CACHE_SQL, (zipcode, city, address))
+    cur.execute(CHECK_CACHE_SQL, (zipcode, burrough, address))
     return cur.fetchone()[0]
 
 
-def query_cache(zipcode, city, address, connection):
+def query_cache(zipcode, burrough, address, connection):
     """
     Query an address from the geolocation cache.
 
     :param str zipcode:
-    :param str city:
+    :param str burrough:
     :param str address:
     :param connection: connection object to the database
     :return tuple: (latitude, longitude) for the address
     """
-    cur = connection.cursor(cursor_factory=psycopg2.extract.DictCursor)
-    cur.execute(QUERY_CACHE_SQL, (zipcode, city, address))
+    cur = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute(QUERY_CACHE_SQL, (zipcode, burrough, address))
     return cur.fetchone()
 
 
-def insert_cache(zipcode, city, address, lat, lon, connection):
+def insert_cache(zipcode, burrough, address, lat, lon, connection):
     """
     Insert an address and its coordinates in the cache.
 
     :param str zipcode:
-    :param str city:
+    :param str burrough:
     :param str address:
     :param float lat: latitude of the address
     :param float lon: longitude of the address
@@ -97,7 +97,7 @@ def insert_cache(zipcode, city, address, lat, lon, connection):
     :return bool: True if the address is cached, else False
     """
     cur = connection.cursor()
-    cur.execute(INSERT_CACHE_SQL, (zipcode, city, address, lat, lon))
+    cur.execute(INSERT_CACHE_SQL, (zipcode, burrough, address, lat, lon))
 
 
 def get_session(
@@ -217,7 +217,7 @@ def add_coordinates(
     :param list[str] columns: columns of the output CSV file
     :param callable geocode: function which accepts a zipcode, a city,
                              an address, *args and *kwargs and returns
-                             a tuple of latitude and longitude
+                             a dictionary containing latitude and longitude
     :param str api_key: API key for the geocoding API
     """
     start = time()
@@ -229,22 +229,23 @@ def add_coordinates(
                 outfile,
                 columns,
                 lineterminator=os.linesep,
+                quoting=csv.QUOTE_NONNUMERIC,
             )
             writer.writeheader()
 
             for row in reader:
                 zipcode = row["zip"]
-                city = row["burrough"]
+                burrough = row["burrough"]
                 address = row["address"].split("unit")[0]
                 with get_connection() as con:
-                    cached = query_cache(zipcode, city, address, con)
+                    cached = query_cache(zipcode, burrough, address, con)
                     if cached:
                         lat, lon = cached["latitude"], cached["longitude"]
                     else:
-                        lat, lon = geocode(zipcode, city, address, api_key)
+                        lat, lon = geocode(zipcode, burrough, address, api_key)
                         insert_cache(
                             zipcode,
-                            city,
+                            burrough,
                             address,
                             lat,
                             lon,
