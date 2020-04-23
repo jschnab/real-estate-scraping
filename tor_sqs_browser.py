@@ -556,7 +556,6 @@ class Browser:
                     csv_file,
                     self.csv_header,
                     lineterminator=os.linesep,
-                    quoting=csv.QUOTE_NONNUMERIC,
                 )
                 writer.writeheader()
 

@@ -219,7 +219,6 @@ def add_coordinates(
                 outfile,
                 columns,
                 lineterminator=os.linesep,
-                quoting=csv.QUOTE_NONNUMERIC,
             )
             writer.writeheader()
 

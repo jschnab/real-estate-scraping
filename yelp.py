@@ -15,6 +15,7 @@ from requests import RequestException
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
+from db_utils import get_connection
 from sql_commands import (
     GET_PAST_BUSINESS_SQL,
 )
@@ -56,32 +57,6 @@ def get_api_key():
     config = ConfigParser()
     config.read(os.path.join(home, ".browsing", "browser.conf"))
     return config["yelp"]["api_key"]
-
-
-def get_connection(autocommit=False):
-    """
-    Get a connection to a PostgreSQL database.
-
-    :param bool autocommit: if SQL commands should be automatically committed
-                            (optional, default False)
-    :return: connection object
-    """
-    config = ConfigParser()
-    config.read(CONFIG_FILE)
-    database = config["database"]["database_name"]
-    username = config["database"]["username"]
-    password = config["database"]["password"]
-    host = config["database"]["host"]
-    port = int(config["database"]["port"])
-    con = psycopg2.connect(
-        database=database,
-        user=username,
-        password=password,
-        host=host,
-        port=port,
-    )
-    con.autocommit = autocommit
-    return con
 
 
 def get_session(
@@ -226,7 +201,6 @@ def add_yelp_annotation(
                 outfile,
                 columns,
                 lineterminator=os.linesep,
-                quoting=csv.QUOTE_NONNUMERIC,
             )
             writer.writeheader()
 
@@ -240,33 +214,39 @@ def add_yelp_annotation(
                 latitude = row["latitude"]
                 longitude = row["longitude"]
 
+                # no geographical coordinates to work with
                 if latitude == "NULL" or longitude == "NULL":
                     row["metrostations"] = "NULL"
                     row["buses"] = "NULL"
                     row["grocery"] = "NULL"
                     row["pharmacy"] = "NULL"
 
+                # we have geographical coordinates
                 else:
-                #with get_connection() as con:
-                #    businesses = get_past_businesses(
-                #        zipcode,
-                #        burrough,
-                #        address,
-                #        con,
-                #    )
-                #    # discard results if they are too old
-                #    if businesses:
-                #        collection_date = businesses["collection_date"]
-                #        if (date.today() - collection_date).days > max_age:
-                #            businesses = None
+                    # check if we've seen these coordinates in the past
+                    with get_connection() as con:
+                        businesses = get_past_businesses(
+                            zipcode,
+                            burrough,
+                            address,
+                            con,
+                        )
 
-               # if not businesses:
-                    businesses = get_number_businesses(
-                        latitude,
-                        longitude,
-                        api_key=api_key,
-                        session=session,
-                    )
+                    # discard results if they are too old
+                    if businesses:
+                        collection_date = businesses["collection_date"]
+                        if (date.today() - collection_date).days > max_age:
+                            businesses = None
+
+                    # if coordinates are new or too old, query Yelp
+                    if not businesses:
+                        businesses = get_number_businesses(
+                            latitude,
+                            longitude,
+                            api_key=api_key,
+                            session=session,
+                        )
+
                     row["metrostations"] = businesses["metrostations"]
                     row["buses"] = businesses["buses"]
                     row["grocery"] = businesses["grocery"]
