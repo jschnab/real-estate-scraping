@@ -1,4 +1,5 @@
 import csv
+import logging
 import math
 import os
 
@@ -10,6 +11,7 @@ import psycopg2
 import psycopg2.extras
 import requests
 
+from db_utils import execute_sql, get_connection
 from geopy.geocoders import Nominatim
 from requests import RequestException
 from requests.adapters import HTTPAdapter
@@ -21,37 +23,21 @@ from sql_commands import (
     QUERY_CACHE_SQL,
 )
 
-CONFIG_DIR = os.path.join(Path.home(), ".browsing")
 BING_URL = (
     "http://dev.virtualearth.net/REST/v1/Locations?CountryRegion=US"
     "&adminDistrict=NY&postalCode={}&locality={}&addressLine={}&key={}"
 )
 
+HOME = str(Path.home())
+CONFIG_FILE = os.path.join(HOME, ".browsing", "browser.conf")
 
-def get_connection(autocommit=False):
-    """
-    Get a connection to a PostgreSQL database.
-
-    :param bool autocommit: if SQL commands should be automatically committed
-                            (optional, default False)
-    :return: connection object
-    """
-    config = ConfigParser()
-    config.read(os.path.join(CONFIG_DIR, "browser.conf"))
-    database = config["database"]["database_name"]
-    username = config["database"]["username"]
-    password = config["database"]["password"]
-    host = config["database"]["host"]
-    port = int(config["database"]["port"])
-    con = psycopg2.connect(
-        database=database,
-        user=username,
-        password=password,
-        host=host,
-        port=port,
-    )
-    con.autocommit = autocommit
-    return con
+config = ConfigParser()
+config.read(CONFIG_FILE)
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s %(message)s",
+    level=logging.INFO,
+    filename=config["logging"]["log_file"],
+    filemode="a")
 
 
 def check_cache(zipcode, burrough, address, connection):
@@ -84,7 +70,7 @@ def query_cache(zipcode, burrough, address, connection):
     return cur.fetchone()
 
 
-def insert_cache(zipcode, burrough, address, lat, lon, connection):
+def insert_cache(zipcode, burrough, address, lat, lon):
     """
     Insert an address and its coordinates in the cache.
 
@@ -93,11 +79,12 @@ def insert_cache(zipcode, burrough, address, lat, lon, connection):
     :param str address:
     :param float lat: latitude of the address
     :param float lon: longitude of the address
-    :param connection: connection object to the database
     :return bool: True if the address is cached, else False
     """
-    cur = connection.cursor()
-    cur.execute(INSERT_CACHE_SQL, (zipcode, burrough, address, lat, lon))
+    execute_sql(
+        INSERT_CACHE_SQL,
+        (zipcode, burrough, address, lat, lon),
+    )
 
 
 def get_session(
@@ -135,14 +122,17 @@ def parse_bing(response):
     :param dict response: Bing Maps response
     :return tuple[float]: latitude, longitude
     """
-    resources_sets = response.get("resourceSets", [{}])
-    resources = resources_sets[0].get("resources", [{}])
-    geocodepoints = resources[0].get("geocodePoints", [{}])
-    coordinates = geocodepoints[0].get("coordinates", [])
+    try:
+        resources_sets = response.get("resourceSets", [{}])
+        resources = resources_sets[0].get("resources", [{}])
+        geocodepoints = resources[0].get("geocodePoints", [{}])
+        coordinates = geocodepoints[0].get("coordinates")
+    except Exception as e:
+        logging.error(f"{e}, cannot parse: {response}")
+        coordinates = None
     if not coordinates:
         return float("nan"), float("nan")
-    else:
-        return coordinates[0], coordinates[1]
+    return coordinates[0], coordinates[1]
 
 
 def query_bing_maps(
@@ -239,18 +229,11 @@ def add_coordinates(
                 address = row["address"].split("unit")[0]
                 with get_connection() as con:
                     cached = query_cache(zipcode, burrough, address, con)
-                    if cached:
-                        lat, lon = cached["latitude"], cached["longitude"]
-                    else:
-                        lat, lon = geocode(zipcode, burrough, address, api_key)
-                        insert_cache(
-                            zipcode,
-                            burrough,
-                            address,
-                            lat,
-                            lon,
-                            con,
-                        )
+                if cached:
+                    lat, lon = cached["latitude"], cached["longitude"]
+                else:
+                    lat, lon = geocode(zipcode, burrough, address, api_key)
+                    insert_cache(zipcode, burrough, address, lat, lon)
                 if math.isnan(lat):
                     lat = "NULL"
                 if math.isnan(lon):

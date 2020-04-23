@@ -25,7 +25,8 @@ from requests.adapters import HTTPAdapter
 from requests.exceptions import RequestException
 from requests.packages.urllib3.util.retry import Retry
 
-from aws_utils import s3
+import aws_utils
+
 from tor import TorSession
 
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
@@ -543,7 +544,7 @@ class Browser:
         """
         with TemporaryDirectory() as temp_dir:
             logging.info(f"downloading files to {temp_dir}")
-            s3.download_files(
+            aws_utils.download_files(
                 self.s3_bucket,
                 f"{self.harvest_key_prefix}/{self.harvest_date}",
                 temp_dir,

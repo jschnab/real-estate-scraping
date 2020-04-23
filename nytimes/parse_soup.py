@@ -270,7 +270,7 @@ def get_common_charges(soup):
     features = soup.find_all("h3")[1].next_sibling
     for f in features:
         if f.find("div").text.lower() == "cc/maintenance":
-            return f.find("p").text.strip()
+            return string_to_float(f.find("p").text.strip())
 
 
 @safety_net
@@ -284,7 +284,7 @@ def get_monthly_taxes(soup):
     features = soup.find_all("h3")[1].next_sibling
     for f in features:
         if f.find("div").text.lower() == "monthly taxes":
-            return f.find("p").text.strip()
+            return string_to_float(f.find("p").text.strip())
 
 
 @safety_net

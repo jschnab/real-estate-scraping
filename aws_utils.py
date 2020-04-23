@@ -42,3 +42,28 @@ def download_files(bucket, key_prefix, destination):
     for obj in objects:
         file_name = os.path.join(destination, os.path.split(obj)[-1])
         client.download_file(bucket, obj, file_name)
+
+
+def download_file(bucket, key, destination):
+    """
+    Download a file from an S3 bucket.
+
+    :param str bucket: name of the S3 bucket
+    :param str key: S3 objects key
+    :param str destination: directory where to store the downloaded file
+    """
+    client = boto3.client("s3")
+    file_name = os.path.join(destination, os.path.split(key)[-1])
+    client.download_file(bucket, key, file_name)
+
+
+def upload_file(bucket, key, source):
+    """
+    Upload a file to an S3 bucket.
+
+    :param str bucket: name of the S3 bucket
+    :param str key: S3 objects key
+    :param str source: path to the file to upload
+    """
+    client = boto3.client("s3")
+    client.upload_file(source, bucket, key)

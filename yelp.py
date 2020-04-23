@@ -226,6 +226,7 @@ def add_yelp_annotation(
                 outfile,
                 columns,
                 lineterminator=os.linesep,
+                quoting=csv.QUOTE_NONNUMERIC,
             )
             writer.writeheader()
 
