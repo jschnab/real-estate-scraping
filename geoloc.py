@@ -196,7 +196,7 @@ def add_coordinates(
     input_csv,
     output_csv,
     columns,
-    geocode,
+    geocode=query_bing_maps,
     api_key=None,
 ):
     """

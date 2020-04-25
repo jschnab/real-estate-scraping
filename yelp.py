@@ -21,15 +21,8 @@ from sql_commands import (
 )
 
 YELP_URL = "https://api.yelp.com/v3/businesses/search"
-YELP_CATEGORIES = [
-    "buses",
-    "metrostations",
-    "grocery",
-    "pharmacy",
-    "laundromat",
-]
+# max cache age for a listing
 MAX_AGE = 60
-
 HOME = str(Path.home())
 CONFIG_FILE = os.path.join(HOME, ".browsing", "browser.conf")
 
@@ -42,26 +35,12 @@ logging.basicConfig(
     filemode="a")
 
 
-def get_credentials():
-    """
-    Read credentials from the configuration file.
-
-    :return tuple[str]: client_id, api_key
-    """
-    config = ConfigParser()
-    config.read(CONFIG_FILE)
-    return config["yelp"]["client_id"], config["yelp"]["api_key"]
-
-
 def get_api_key():
     """
     Read the API key from the configuration file.
 
     :return str: api_key
     """
-    home = str(Path.home())
-    config = ConfigParser()
-    config.read(os.path.join(home, ".browsing", "browser.conf"))
     return config["yelp"]["api_key"]
 
 
@@ -96,7 +75,7 @@ def query_yelp(
     latitude,
     longitude,
     radius=600,
-    categories=YELP_CATEGORIES,
+    categories=None,
     limit=50,
     session=None,
     timeout=5,
@@ -107,6 +86,8 @@ def query_yelp(
     Make a request to the Yelp Fusion API.
 
     """
+    if not categories:
+        categories = config["yelp"]["categories"].split(",")
     if not session:
         session = get_session()
     if not api_key:
@@ -134,7 +115,7 @@ def get_number_businesses(
     latitude,
     longitude,
     radius=600,
-    categories=YELP_CATEGORIES,
+    categories=None,
     api_key=None,
     session=None,
 ):
@@ -142,6 +123,8 @@ def get_number_businesses(
     Query the Yelp Fusion API and return the number of businesses
     per category.
     """
+    if not categories:
+        categories = config["yelp"]["categories"].split(",")
     results = dict(zip(categories, [0] * len(categories)))
     data = query_yelp(
         latitude,

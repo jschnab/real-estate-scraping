@@ -1,8 +1,5 @@
-import os
 import time
 
-from configparser import ConfigParser
-from datetime import datetime
 from pathlib import Path
 
 import boto3
@@ -10,9 +7,6 @@ import boto3
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
-
-import aws_utils
-import geoloc
 
 from nytimes.browse import *
 from nytimes.parse_soup import *
@@ -54,54 +48,12 @@ def extract(**context):
     crawler.extract()
 
 
-def add_coordinates(**context):
-    config = ConfigParser()
-    config.read(os.path.join(HOME, '.browsing', 'browser.conf'))
-    date = datetime.strptime(context["ds_nodash"], "%Y%m%d")
-
-    aws_utils.download_file(
-        bucket=config["s3"]["bucket"],
-        key="real-estate/nytimes/extract/{date.strftime('%Y/%m/%d')}/extract.csv",
-        destination=os.path.join(HOME, "real-estate-scraping"),
+def add_geolocation(**context):
+    crawler = Browser(
+        base_url="https://www.nytimes.com",
+        harvest_date=context["ds_nodash"]
     )
-
-    geoloc.add_coordinates(
-        input_csv=os.path.join(HOME, 'real-estate-scraping', 'extract.csv'),
-        output_csv=os.path.join(HOME, 'real-estate-scraping', 'coordinates.csv'),
-        columns=config['geolocation']['csv_header'].split(','),
-        geocode=geoloc.query_bing_maps,
-        api_key=config['geolocation']['bing_maps_key'],
-    )
-
-    aws_utils.upload_file(
-        source=os.path.join(HOME, "real-estate-scraping", "coordinates.csv"),
-        bucket=config["s3"]["bucket"],
-        key="real-estate/nytimes/coordinates/{date.strftime('%Y/%m/%d')}/coordinates.csv",
-    )
-
-
-def add_annotation(**context):
-    config = ConfigParser()
-    config.read(os.path.join(HOME, '.browsing', 'browser.conf'))
-    date = datetime.strptime(context["ds_nodash"], "%Y%m%d")
-
-    aws_utils.download_file(
-        bucket=config["s3"]["bucket"],
-        key="real-estate/nytimes/coordinates/{date.strftime('%Y/%m/%d')}/coordinates.csv",
-        destination=os.path.join(HOME, "real-estate-scraping"),
-    )
-
-    add_yelp_annotation(
-        input_csv=os.path.join(HOME, "real-estate-scraping", "coordinates.csv"),
-        output_csv=os.path.join(HOME, "real-estate-scraping", "annotated.csv"),
-        columns=config['yelp']['csv_header'].split(','),
-    )
-
-    aws_utils.upload_file(
-        source=os.path.join(HOME, "real-estate-scraping", "annotated.csv"),
-        bucket=config["s3"]["bucket"],
-        key="real-estate/nytimes/annotation/{date.strftime('%Y/%m/%d')}/annotated.csv",
-    )
+    crawler.geolocalize()
 
 
 default_args = {
@@ -136,16 +88,9 @@ extract_task = PythonOperator(
 
 geoloc_task = PythonOperator(
     task_id="geolocation",
-    python_callable=add_coordinates,
+    python_callable=add_geolocation,
     provide_context=True,
     dag=dag,
 )
 
-annotation_task = PythonOperator(
-    task_id="annotation",
-    python_callable=add_annotation,
-    provide_context=True,
-    dag=dag,
-)
-
-browse_task >> wait_task >> extract_task >> geoloc_task >> annotation_task
+browse_task >> wait_task >> extract_task >> geoloc_task

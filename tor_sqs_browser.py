@@ -95,8 +95,8 @@ class Browser:
         browse_delay=0,
         html_parser="html.parser",
         soup_parser=None,
+        geolocator=None,
         config=DEFAULT_CONFIG,
-        extract_s3_key="extract.csv",
         harvest_date=None,
     ):
         """
@@ -106,7 +106,7 @@ class Browser:
 
         This class browses pages  within the same domain.
 
-        Maintains two queues:
+        Uses two queues:
             - pages to browse
             - pages to parse (i.e. extradata from HTML code)
 
@@ -135,10 +135,11 @@ class Browser:
                                    downloads
         :param str html_parser: parser to use with BeautifulSoup, e.g.
                                 'html.parser', 'lxml', etc
-        :param soup_parser: function to use to parse the HTML tags soup into
-                            a dictionary
+        :param callable soup_parser: function to use to parse the HTML tags
+                                     soup into a dictionary
+        :param callable geolocator: function which adds latitude and longitude
+                                    to a home listing
         :param str config: path to the browser configuration file
-        :param str extract_s3_key: name of the CSV file to store to S3
         :param str harvest_date: date of harvest, format YYYYMMDD
         """
         self.base_url = base_url
@@ -160,12 +161,12 @@ class Browser:
         self.s3_client = boto3.client("s3")
         self.explored = Explored()
         self.havest_pauses = 0
-        self.extract_s3_key = extract_s3_key
         self.harvest_date = self.set_harvest_date(harvest_date)
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
         else:
             self.html_parser = partial(BeautifulSoup, features=html_parser)
+        self.geolocator = geolocator
 
         # parse the robots.txt file
         try:
@@ -216,12 +217,10 @@ class Browser:
         self.sqs_queue = config["sqs"]["queue_url"]
         self.s3_bucket = config["s3"]["bucket"]
         self.harvest_key_prefix = config["harvest"]["key_prefix"]
-        self.extract_csv = config["extract"]["csv_path"]
         self.extract_key_prefix = config["extract"]["key_prefix"]
-
-        self.csv_header = [
-            col.strip() for col in config["extract"]["csv_header"].split(",")
-        ]
+        self.geoloc_key_prefix = config["geolocation"]["key_prefix"]
+        self.extract_csv_header = config["extract"]["csv_header"].split(",")
+        self.geoloc_csv_header = config["geolocation"]["csv_header"].split(",")
 
         logging.basicConfig(
             format="%(asctime)s %(levelname)s %(message)s",
@@ -550,11 +549,11 @@ class Browser:
                 temp_dir,
             )
 
-            csv_path = os.path.join(temp_dir, self.extract_s3_key)
+            csv_path = os.path.join(temp_dir, "extract.csv")
             with open(csv_path, "w") as csv_file:
                 writer = csv.DictWriter(
                     csv_file,
-                    self.csv_header,
+                    self.extract_csv_header,
                     lineterminator=os.linesep,
                 )
                 writer.writeheader()
@@ -587,10 +586,8 @@ class Browser:
                         )
 
             # upload CSV file to S3
-            csv_s3_key = os.path.join(
-                self.extract_key_prefix,
-                self.harvest_date,
-                self.extract_s3_key
+            csv_s3_key = (
+                f"{self.extract_key_prefix}/{self.harvest_date}/extract.csv"
             )
             logging.info(f"uploading data to {self.s3_bucket}/{csv_s3_key}")
             client = boto3.client("s3")
@@ -601,3 +598,37 @@ class Browser:
             )
 
         logging.info("extraction finished")
+
+        def geolocalize(self):
+            logging.info("starting geolocation")
+
+            with TemporaryDirectory() as temp_dir:
+                input_csv_s3_key = (
+                    f"{self.extract_key_prefix}/{self.harvest_date}/"
+                    "extract.csv"
+                )
+                aws_utils.download_file(
+                    self.s3_bucket,
+                    input_csv_s3_key,
+                    temp_dir,
+                )
+                self.geolocator(
+                    os.path.join(temp_dir, "extract.csv"),
+                    os.path.join(temp_dir, "coordinates.csv"),
+                    self.geoloc_csv_header,
+                )
+                output_csv_s3_key = (
+                    f"{self.geoloc_key_prefix}/{self.harvest_date}/"
+                    "coordinates.csv"
+                )
+                logging.info(
+                    f"uploading data to {self.s3_bucket}/{output_csv_s3_key}"
+                )
+                client = boto3.client("s3")
+                client.upload_file(
+                    os.path.join(temp_dir, "coordinates.csv"),
+                    self.s3_bucket,
+                    output_csv_s3_key,
+                )
+
+                logging.info("geolocation finished")
