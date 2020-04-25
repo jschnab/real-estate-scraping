@@ -1,0 +1,57 @@
+#!/bin/bash
+
+set -ex
+set -o pipefail
+
+exec > >(tee /var/log/user_data.log | logger -t user_data) 2>&1
+echo BEGIN
+BEGINTIME=$(date +%s)
+date "+%Y-%m-%d %H:%M:%S"
+
+yum update -y
+yum install -y git python3 gcc postgresql-devel python3-devel.x86_64 openssl-devel
+
+pip3 install bs4 torrequest awscli boto3 apache-airflow[celery]
+pip3 install --global-option="--with-openssl"
+
+adduser airflow
+AIRFLOW_HOME=/home/airflow
+AIRFLOW_ENV="$AIRFLOW_HOME"/airflow.env
+AIRFLOW_BIN=/usr/local/bin/airflow
+
+cat << EOF > "$AIRFLOW_HOME"/airflow.cfg
+${airflow_config}
+EOF
+
+cat << EOF > /etc/systemd/system/airflow-worker.service
+${worker_service}
+EOF
+
+cat << EOF > "$AIRFLOW_ENV"
+AIRFLOW_HOME="$AIRFLOW_HOME"
+AIRFLOW_CONFIG="$AIRFLOW_HOME"/airflow.cfg
+EOF
+
+mkdir /home/ec2-user/.aws
+cat << EOT > /home/ec2-user/.aws/config
+[default]
+region = us-east-1
+output = json
+EOT
+
+mkdir "$AIRFLOW_HOME"/logs
+mkdir "$AIRFLOW_HOME"/dags
+
+git clone https://github.com/jschnab/real-estate-scraping.git
+mv real-estate-scraping "$AIRFLOW_HOME"/real-estate-scraping
+mv real-estate-scraping/airflow_dag.py "$AIRFLOW_HOME"/dags/
+
+chown -R airflow:airflow "$AIRFLOW_HOME"
+
+systemctl enable airflow-worker
+systemctl start airflow-worker
+
+date "+%Y-%m-%d %H:%M:%S"
+ENDTIME=$(date +%s)
+echo "deployment took $((ENDTIME - BEGINTIME)) seconds"
+echo END
