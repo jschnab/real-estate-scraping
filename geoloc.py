@@ -242,4 +242,4 @@ def add_coordinates(
                 writer.writerow(row)
     stop = time()
     elapsed = (stop - start) / 60
-    print(f"took {elapsed:.2f} minutes")
+    print(f"geolocation took {elapsed:.2f} minutes")

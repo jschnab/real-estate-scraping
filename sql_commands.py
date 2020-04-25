@@ -55,11 +55,12 @@ CREATE TABLE rentals (
     metrostations INTEGER,
     buses INTEGER,
     grocery INTEGER,
-    pharmacy INTEGER
+    pharmacy INTEGER,
+    laundromat INTEGER
 );"""
 
 GET_PAST_BUSINESS_SQL = """
-SELECT metrostations, buses, grocery, pharmacy, collection_date
+SELECT metrostations, buses, grocery, pharmacy, laundromat, collection_date
 FROM rentals
 WHERE zip = %s
 AND burrough = %s

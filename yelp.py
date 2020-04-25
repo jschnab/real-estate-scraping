@@ -21,7 +21,13 @@ from sql_commands import (
 )
 
 YELP_URL = "https://api.yelp.com/v3/businesses/search"
-YELP_CATEGORIES = ["buses", "metrostations", "grocery", "pharmacy"]
+YELP_CATEGORIES = [
+    "buses",
+    "metrostations",
+    "grocery",
+    "pharmacy",
+    "laundromat",
+]
 MAX_AGE = 60
 
 HOME = str(Path.home())
@@ -146,7 +152,10 @@ def get_number_businesses(
         session=session,
     )
 
-    if data == "too many requests" or data is None:
+    if data == "too many requests":
+        return data
+
+    elif data is None:
         return dict(zip(categories, ["NULL"] * len(categories)))
 
     businesses = data.get("businesses", [])
@@ -220,6 +229,7 @@ def add_yelp_annotation(
                     row["buses"] = "NULL"
                     row["grocery"] = "NULL"
                     row["pharmacy"] = "NULL"
+                    row["laundromat"] = "NULL"
 
                 # we have geographical coordinates
                 else:
@@ -246,14 +256,17 @@ def add_yelp_annotation(
                             api_key=api_key,
                             session=session,
                         )
+                        if businesses == "too many requests":
+                            break
 
                     row["metrostations"] = businesses["metrostations"]
                     row["buses"] = businesses["buses"]
                     row["grocery"] = businesses["grocery"]
                     row["pharmacy"] = businesses["pharmacy"]
+                    row["laundromat"] = businesses["laundromat"]
 
                 writer.writerow(row)
 
     stop = time()
     elapsed = (stop - start) / 60
-    logging.info(f"took {elapsed:.2f} minutes")
+    logging.info(f"Yelp annotation took {elapsed:.2f} minutes")

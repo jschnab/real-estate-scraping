@@ -1,7 +1,10 @@
 __pycache__
 *.txt
 *.bz2
+*.gz
 *.csv
 *.json
 *.html
 *bing_key
+*.pyc
+*nohup.out
