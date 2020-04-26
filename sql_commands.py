@@ -51,17 +51,12 @@ CREATE TABLE rentals (
     source VARCHAR,
     collection_date DATE,
     latitude NUMERIC(8, 5),
-    longitude NUMERIC(8, 5),
-    metrostations INTEGER,
-    buses INTEGER,
-    grocery INTEGER,
-    pharmacy INTEGER,
-    laundromat INTEGER
+    longitude NUMERIC(8, 5)
 );"""
 
 GET_PAST_BUSINESS_SQL = """
 SELECT metrostations, buses, grocery, pharmacy, laundromat, collection_date
-FROM rentals
+FROM rentals_annotated
 WHERE zip = %s
 AND burrough = %s
 AND address = %s
@@ -77,3 +72,9 @@ NULL %s
 {header}
 QUOTE %s
 ENCODING %s;"""
+
+TABLE_EXISTS_SQL = """
+SELECT EXISTS (
+    SELECT FROM pg_tables
+    WHERE tablename = %s
+);"""

@@ -19,6 +19,7 @@ from requests.packages.urllib3.util.retry import Retry
 
 from sql_commands import (
     CHECK_CACHE_SQL,
+    CREATE_CACHE_SQL,
     INSERT_CACHE_SQL,
     QUERY_CACHE_SQL,
 )
@@ -227,6 +228,8 @@ def add_coordinates(
                 burrough = row["burrough"]
                 address = row["address"].split("unit")[0]
                 with get_connection() as con:
+                    if not table_exists("geocache"):
+                        execute_sql(CREATE_CACHE_SQL)
                     cached = query_cache(zipcode, burrough, address, con)
                 if cached:
                     lat, lon = cached["latitude"], cached["longitude"]

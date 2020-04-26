@@ -9,6 +9,7 @@ import psycopg2.extras
 
 from sql_commands import (
     COPY_FROM_SQL,
+    TABLE_EXISTS_SQL,
 )
 
 HOME = str(Path.home())
@@ -71,6 +72,43 @@ def execute_sql(statement, parameters=None, connection=None):
         raise
     finally:
         connection.close()
+
+
+def query_sql(statement, parameters=None, connection=None):
+    """
+    Query the database.
+
+    Statements should be passed this way:
+    [("SELECT * FROM friends WHERE age > %s", (42,)), ...]
+
+    :param str statement: SQL statement
+    :param tuple parameters: parameters of the SQL statement (optional)
+    :param connection: a psycopg2 connection object (optional)
+    :return list[tuple]: query results
+    """
+    if not connection:
+        connection = get_connection(autocommit=True)
+    cur = connection.cursor()
+    try:
+        cur.execute(statement, parameters)
+        return cur.fetchall()
+    except Exception as e:
+        logging.critical(e)
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def table_exists(table_name):
+    """
+    Check if a table exists in the database.
+
+    :param str table_name: name of the table to check
+    :return bool: True if the table exists else False
+    """
+    result = query_sql(TABLE_EXISTS_SQL, (table_name,))
+    return result[0][0]
 
 
 def copy_from(
