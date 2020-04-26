@@ -37,7 +37,7 @@ output = json
 EOT
 
 git clone https://github.com/jschnab/real-estate-scraping.git /home/ec2-user/real-estate-scraping
-aws s3 cp --recursive s3://"$S3_BUCKET"/real-estate/browser_config /home/ec2-user/.browsing
+aws s3 cp --recursive s3://real-estate-browsing/config /home/ec2-user/.browsing
 
 chown -R ec2-user:ec2-user /home/ec2-user/
 

@@ -45,6 +45,7 @@ mkdir "$AIRFLOW_HOME"/dags
 git clone https://github.com/jschnab/real-estate-scraping.git
 mv real-estate-scraping "$AIRFLOW_HOME"/real-estate-scraping
 mv real-estate-scraping/airflow_dag.py "$AIRFLOW_HOME"/dags/
+aws s3 cp --recursive s3://real-estate-browsing/config /home/ec2-user/.browsing
 
 chown -R airflow:airflow "$AIRFLOW_HOME"
 
