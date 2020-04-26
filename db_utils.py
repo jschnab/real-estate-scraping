@@ -20,7 +20,7 @@ config.read(CONFIG_FILE)
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     level=logging.INFO,
-    filename=config["logging"]["log_file"],
+    filename=os.path.join(HOME, ".browsing", "browser.log"),
     filemode="a")
 
 

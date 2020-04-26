@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 
 from configparser import ConfigParser
@@ -11,6 +12,8 @@ import boto3
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
+
+sys.path.insert(0, os.path.join(str(Path.home()), "real-estate-scraping"))
 
 import nytimes.browse
 import nytimes.parse_soup
@@ -55,7 +58,7 @@ def extract(**context):
 def add_geolocation(**context):
     crawler = Browser(
         base_url="https://www.nytimes.com",
-        harvest_date=context["ds_nodash"]
+        harvest_date=context["ds_nodash"],
         config_file="nytimes.conf",
     )
     crawler.geolocalize()

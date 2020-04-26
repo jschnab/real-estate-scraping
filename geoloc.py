@@ -11,7 +11,7 @@ import psycopg2
 import psycopg2.extras
 import requests
 
-from db_utils import execute_sql, get_connection
+from db_utils import execute_sql, get_connection, table_exists
 from geopy.geocoders import Nominatim
 from requests import RequestException
 from requests.adapters import HTTPAdapter
@@ -37,7 +37,7 @@ config.read(CONFIG_FILE)
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     level=logging.INFO,
-    filename=config["logging"]["log_file"],
+    filename=os.path.join(HOME, ".browsing", "browser.log"),
     filemode="a")
 
 
