@@ -28,6 +28,7 @@ def browse():
         get_browsable=nytimes.browse.wrapper_next_page,
         get_parsable=nytimes.browse.get_listings,
         get_page_id=nytimes.browse.get_listing_id,
+        config_file="nytimes.conf",
     )
     crawler.browse(nytimes.browse.BEGIN_RENT_LISTINGS)
 
@@ -46,6 +47,7 @@ def extract(**context):
         base_url="https://www.nytimes.com",
         soup_parser=nytimes.parse_soup.parse_webpage,
         harvest_date=context["ds_nodash"]
+        config_file="nytimes.conf",
     )
     crawler.extract()
 
@@ -54,6 +56,7 @@ def add_geolocation(**context):
     crawler = Browser(
         base_url="https://www.nytimes.com",
         harvest_date=context["ds_nodash"]
+        config_file="nytimes.conf",
     )
     crawler.geolocalize()
 
