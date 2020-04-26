@@ -86,7 +86,6 @@ class Browser:
         get_page_id=None,
         headers=None,
         user_agents=None,
-        proxies=None,
         timeout=5,
         max_retries=5,
         backoff_factor=0.3,
@@ -124,8 +123,6 @@ class Browser:
                                      unique ID
         :param dict headers: request headers (excluding user agent)
         :param list user_agents: request user agents
-        :param list[dict] proxies: list of proxies dictionaries with format
-                                   {procotol: ip:port}
         :param int timeout: timeout for requests
         :param int max_retries: maximum number of retries on request failure
         :param float backoff_factor: delay backoff factor for request retries
@@ -148,7 +145,6 @@ class Browser:
         self.get_page_id = get_page_id
         self.headers = headers
         self.user_agents = user_agents
-        self.proxies = proxies
         self.timeout = timeout
         self.max_retries = max_retries
         self.backoff_factor = backoff_factor
@@ -218,7 +214,6 @@ class Browser:
         self.geoloc_csv_header = conf["geolocation"]["csv_header"].split(",")
         self.get_headers(os.path.join(CONFIG_DIR, "headers"))
         self.get_user_agents(os.path.join(CONFIG_DIR, "user_agents"))
-        self.get_proxies(os.path.join(CONFIG_DIR, "proxies"))
 
         logging.basicConfig(
             format="%(asctime)s %(levelname)s %(message)s",
@@ -247,16 +242,6 @@ class Browser:
             self.user_agents = json.load(f)
         self.headers["User-Agent"] = random.choice(self.user_agents)
 
-    def get_proxies(self, file_name, fmt=False):
-        """
-        Read and format request proxies from a JSON file.
-
-        :param str file_name: name of the file storing proxies
-        :return dict: request headers
-        """
-        with open(file_name) as f:
-            self.proxies = json.load(f)
-
     def choose_headers(self):
         """
         Generate full request headers by randomly selecting a user agent
@@ -269,17 +254,6 @@ class Browser:
         if self.user_agents:
             headers["User-Agent"] = random.choice(self.user_agents)
         return headers
-
-    def choose_proxy(self):
-        """
-        Randomly select a proxy from the list.
-        If proxies are not used, return None.
-
-        :return dict: request proxy
-        """
-        if self.proxies is None:
-            return
-        return random.choice(self.proxies)
 
     def can_fetch(self, agent, url):
         """
