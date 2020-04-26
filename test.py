@@ -14,6 +14,7 @@ def main():
         get_parsable=get_listings,
         get_page_id=get_listing_id,
         soup_parser=parse_webpage,
+        config_file="nytimes.conf",
     )
     if sys.argv[1] == "browse":
         crawler.browse(BEGIN_RENT_LISTINGS)
