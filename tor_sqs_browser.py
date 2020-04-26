@@ -30,7 +30,6 @@ import aws_utils
 from tor import TorSession
 
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
-DEFAULT_CONFIG = os.path.join(CONFIG_DIR, "browser.conf")
 MAX_TOR_REQ = 50
 HARVEST_PAUSE_BACKOFF = 0.3
 HARVEST_PAUSE_MAX = 60 * 30  # 30 minutes
@@ -96,7 +95,7 @@ class Browser:
         html_parser="html.parser",
         soup_parser=None,
         geolocator=None,
-        config=DEFAULT_CONFIG,
+        config_file="browser.conf",
         harvest_date=None,
     ):
         """
@@ -139,7 +138,7 @@ class Browser:
                                      soup into a dictionary
         :param callable geolocator: function which adds latitude and longitude
                                     to a home listing
-        :param str config: path to the browser configuration file
+        :param str config_file: name of the configuration file
         :param str harvest_date: date of harvest, format YYYYMMDD
         """
         self.base_url = base_url
@@ -184,14 +183,9 @@ class Browser:
             self.browse_delay = browse_delay
 
         # apply config
-        if Path(config).exists():
-            self.configure(config)
-        if Path(os.path.join(CONFIG_DIR, "proxies")).exists():
-            self.get_proxies(os.path.join(CONFIG_DIR, "proxies"))
-        if Path(os.path.join(CONFIG_DIR, "headers")).exists():
-            self.get_headers(os.path.join(CONFIG_DIR, "headers"))
-        if Path(os.path.join(CONFIG_DIR, "user_agents")).exists():
-            self.get_user_agents(os.path.join(CONFIG_DIR, "user_agents"))
+        self.config_path = os.path.join(CONFIG_DIR, config_file)
+        if Path(self.config_path).exists():
+            self.configure(self.config_path)
 
     def set_harvest_date(self, date):
         """
@@ -212,20 +206,23 @@ class Browser:
 
         :param str config_file: path to the configuration file
         """
-        config = ConfigParser()
-        config.read(config_file)
-        self.sqs_queue = config["sqs"]["queue_url"]
-        self.s3_bucket = config["s3"]["bucket"]
-        self.harvest_key_prefix = config["harvest"]["key_prefix"]
-        self.extract_key_prefix = config["extract"]["key_prefix"]
-        self.geoloc_key_prefix = config["geolocation"]["key_prefix"]
-        self.extract_csv_header = config["extract"]["csv_header"].split(",")
-        self.geoloc_csv_header = config["geolocation"]["csv_header"].split(",")
+        self.config = ConfigParser().read(config_file)
+        conf = self.config
+        self.sqs_queue = conf["sqs"]["queue_url"]
+        self.s3_bucket = conf["s3"]["bucket"]
+        self.harvest_key_prefix = conf["harvest"]["key_prefix"]
+        self.extract_key_prefix = conf["extract"]["key_prefix"]
+        self.geoloc_key_prefix = conf["geolocation"]["key_prefix"]
+        self.extract_csv_header = conf["extract"]["csv_header"].split(",")
+        self.geoloc_csv_header = conf["geolocation"]["csv_header"].split(",")
+        self.get_headers(os.path.join(CONFIG_DIR, "headers"))
+        self.get_user_agents(os.path.join(CONFIG_DIR, "user_agents"))
+        self.get_proxies(os.path.join(CONFIG_DIR, "proxies"))
 
         logging.basicConfig(
             format="%(asctime)s %(levelname)s %(message)s",
             level=logging.INFO,
-            filename=config["logging"]["log_file"],
+            filename=conf["logging"]["log_file"],
             filemode="a")
 
     def get_headers(self, file_name):
