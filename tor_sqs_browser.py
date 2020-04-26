@@ -206,7 +206,8 @@ class Browser:
 
         :param str config_file: path to the configuration file
         """
-        self.config = ConfigParser().read(config_file)
+        self.config = ConfigParser()
+        self.config.read(config_file)
         conf = self.config
         self.sqs_queue = conf["sqs"]["queue_url"]
         self.s3_bucket = conf["s3"]["bucket"]

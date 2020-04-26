@@ -66,7 +66,8 @@ def add_geolocation(**context):
 
 def load(**context):
     CONFIG_FILE = os.path.join(str(Path.home()), ".browsing", "browser.conf")
-    config = ConfigParser().read(CONFIG_FILE)
+    config = ConfigParser()
+    config.read(CONFIG_FILE)
     date_obj = datetime.striptime(context["ds_nodash"], "%Y%m%d")
     date_str = date_obj.strftime("%Y/%m/%d")
     csv_s3_key = f"nytimes/coordinates/{date_str}/coordinates.csv"
