@@ -28,7 +28,7 @@ CookieAuthentication 1
 EOT
 
 mkdir "$HARVESTER_HOME"/.browsing
-echo "TOR_PASSWORD=$TOR_PASSWORD" > "HARVESTER_HOME"/.browsing/vars.conf
+echo "TOR_PASSWORD=$TOR_PASSWORD" > "$HARVESTER_HOME"/.browsing/vars.conf
 echo "HashedControlPassword $(tor --hash-password "$TOR_PASSWORD" | grep --color=never 16:[A-Z0-9])" >> /etc/tor/torrc
 systemctl restart tor
 
