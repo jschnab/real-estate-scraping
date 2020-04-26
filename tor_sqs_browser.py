@@ -222,7 +222,7 @@ class Browser:
         logging.basicConfig(
             format="%(asctime)s %(levelname)s %(message)s",
             level=logging.INFO,
-            filename=conf["logging"]["log_file"],
+            filename=os.path.join(CONFIG_DIR, "browser.log"),
             filemode="a")
 
     def get_headers(self, file_name):
