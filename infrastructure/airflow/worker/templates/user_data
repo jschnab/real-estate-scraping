@@ -9,10 +9,10 @@ BEGINTIME=$(date +%s)
 date "+%Y-%m-%d %H:%M:%S"
 
 yum update -y
-yum install -y git python3 gcc postgresql-devel python3-devel.x86_64 openssl-devel
+yum install -y git python3 gcc postgresql-devel python3-devel.x86_64 openssl-devel libcurl-devel
 
-pip3 install bs4 torrequest awscli boto3 apache-airflow[celery]
-pip3 install --global-option="--with-openssl"
+pip3 install psycopg2 bs4 torrequest awscli boto3 apache-airflow[celery]
+pip3 install pycurl --global-option="--with-openssl"
 
 adduser airflow
 AIRFLOW_HOME=/home/airflow

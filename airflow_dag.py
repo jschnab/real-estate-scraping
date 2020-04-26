@@ -46,7 +46,7 @@ def extract(**context):
     crawler = Browser(
         base_url="https://www.nytimes.com",
         soup_parser=nytimes.parse_soup.parse_webpage,
-        harvest_date=context["ds_nodash"]
+        harvest_date=context["ds_nodash"],
         config_file="nytimes.conf",
     )
     crawler.extract()
