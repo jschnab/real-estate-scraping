@@ -63,15 +63,24 @@ AND address = %s
 ORDER BY collection_date DESC
 LIMIT 1;"""
 
-COPY_FROM_SQL = """
+COPY_FROM_WITH_HEADER_SQL = """
 COPY {table_name}
-FROM %s
+FROM STDIN
 csv
-DELIMITER %s
-NULL %s
-{header}
-QUOTE %s
-ENCODING %s;"""
+DELIMITER {delimiter}
+NULL {null}
+HEADER
+QUOTE {quote}
+ENCODING {encoding};"""
+
+COPY_FROM_NO_HEADER_SQL = """
+COPY {table_name}
+FROM STDIN
+csv
+DELIMITER {delimiter}
+NULL {null}
+QUOTE {quote}
+ENCODING {encoding};"""
 
 TABLE_EXISTS_SQL = """
 SELECT EXISTS (

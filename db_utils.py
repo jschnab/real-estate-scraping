@@ -7,8 +7,11 @@ from pathlib import Path
 import psycopg2
 import psycopg2.extras
 
+from psycopg2 import sql
+
 from sql_commands import (
-    COPY_FROM_SQL,
+    COPY_FROM_NO_HEADER_SQL,
+    COPY_FROM_WITH_HEADER_SQL,
     TABLE_EXISTS_SQL,
 )
 
@@ -121,7 +124,7 @@ def copy_from(
     encoding="utf-8",
 ):
     """
-    Copy a file-like object into the specified table.
+    Copy a CSV file into the specified table.
 
     :param str file_name: name of the file to load into the database
     :param str table_name: name of the table to load data into
@@ -134,10 +137,25 @@ def copy_from(
     :param str encoding: file encoding, optional (default 'utf-8')
     """
     if header:
-        header = "HEADER"
+        template = COPY_FROM_WITH_HEADER_SQL
     else:
-        header = ""
-    execute_sql(
-        COPY_FROM_SQL.format(table_name=table_name, header=header),
-        (file_name, delimiter, null_if, quote, encoding),
+        template = COPY_FROM_NO_HEADER_SQL
+    copy_command = sql.SQL(template).format(
+        table_name=sql.Identifier(table_name),
+        delimiter=sql.Literal(delimiter),
+        null=sql.Literal(null_if),
+        quote=sql.Literal(quote),
+        encoding=sql.Literal(encoding),
     )
+
+    connection = get_connection(autocommit=True)
+    cur = connection.cursor()
+    try:
+        with open(file_name) as f:
+            cur.copy_expert(copy_command, f)
+    except Exception as e:
+        logging.critical(e)
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
