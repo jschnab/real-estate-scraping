@@ -13,7 +13,7 @@ amazon-install-extras -y epel
 yum-config-manager --enable epel*
 yum install -y git python3 gcc postgresql-devel python3-devel.x86_64 openssl-devel libcurl-devel tor
 
-pip3 install psycopg2 bs4 torrequest awscli boto3 apache-airflow[celery]
+pip3 install geopy psycopg2 bs4 torrequest awscli boto3 apache-airflow[celery]
 pip3 install pycurl --global-option="--with-openssl"
 
 adduser airflow
