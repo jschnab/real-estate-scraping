@@ -15,6 +15,7 @@ from airflow.utils.dates import days_ago
 
 sys.path.insert(0, os.path.join(str(Path.home()), "real-estate-scraping"))
 
+import geoloc
 import nytimes.browse
 import nytimes.parse_soup
 
@@ -60,17 +61,18 @@ def add_geolocation(**context):
         base_url="https://www.nytimes.com",
         harvest_date=context["ds_nodash"],
         config_file="nytimes.conf",
+        geolocator=geoloc.add_coordinates,
     )
     crawler.geolocalize()
 
 
 def load(**context):
-    CONFIG_FILE = os.path.join(str(Path.home()), ".browsing", "browser.conf")
+    CONFIG_FILE = os.path.join(str(Path.home()), ".browsing", "nytimes.conf")
     config = ConfigParser()
     config.read(CONFIG_FILE)
-    date_obj = datetime.striptime(context["ds_nodash"], "%Y%m%d")
+    date_obj = datetime.strptime(context["ds_nodash"], "%Y%m%d")
     date_str = date_obj.strftime("%Y/%m/%d")
-    csv_s3_key = f"nytimes/coordinates/{date_str}/coordinates.csv"
+    csv_s3_key = f"coordinates/nytimes/{date_str}/coordinates.csv"
     with TemporaryDirectory() as temp_dir:
         download_file(
             config["s3"]["bucket"],
@@ -123,7 +125,7 @@ geoloc_task = PythonOperator(
 load_task = PythonOperator(
     task_id="load",
     python_callable=load,
-    provie_context=True,
+    provide_context=True,
     dag=dag,
 )
 

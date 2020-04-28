@@ -571,36 +571,36 @@ class Browser:
 
         logging.info("extraction finished")
 
-        def geolocalize(self):
-            logging.info("starting geolocation")
+    def geolocalize(self):
+        logging.info("starting geolocation")
 
-            with TemporaryDirectory() as temp_dir:
-                input_csv_s3_key = (
-                    f"{self.extract_key_prefix}/{self.harvest_date}/"
-                    "extract.csv"
-                )
-                aws_utils.download_file(
-                    self.s3_bucket,
-                    input_csv_s3_key,
-                    temp_dir,
-                )
-                self.geolocator(
-                    os.path.join(temp_dir, "extract.csv"),
-                    os.path.join(temp_dir, "coordinates.csv"),
-                    self.geoloc_csv_header,
-                )
-                output_csv_s3_key = (
-                    f"{self.geoloc_key_prefix}/{self.harvest_date}/"
-                    "coordinates.csv"
-                )
-                logging.info(
-                    f"uploading data to {self.s3_bucket}/{output_csv_s3_key}"
-                )
-                client = boto3.client("s3")
-                client.upload_file(
-                    os.path.join(temp_dir, "coordinates.csv"),
-                    self.s3_bucket,
-                    output_csv_s3_key,
-                )
+        with TemporaryDirectory() as temp_dir:
+            input_csv_s3_key = (
+                f"{self.extract_key_prefix}/{self.harvest_date}/"
+                "extract.csv"
+            )
+            aws_utils.download_file(
+                self.s3_bucket,
+                input_csv_s3_key,
+                temp_dir,
+            )
+            self.geolocator(
+                os.path.join(temp_dir, "extract.csv"),
+                os.path.join(temp_dir, "coordinates.csv"),
+                self.geoloc_csv_header,
+            )
+            output_csv_s3_key = (
+                f"{self.geoloc_key_prefix}/{self.harvest_date}/"
+                "coordinates.csv"
+            )
+            logging.info(
+                f"uploading data to {self.s3_bucket}/{output_csv_s3_key}"
+            )
+            client = boto3.client("s3")
+            client.upload_file(
+                os.path.join(temp_dir, "coordinates.csv"),
+                self.s3_bucket,
+                output_csv_s3_key,
+            )
 
-                logging.info("geolocation finished")
+            logging.info("geolocation finished")
