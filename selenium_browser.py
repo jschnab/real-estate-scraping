@@ -41,8 +41,6 @@ class Browser:
         get_parsable=None,
         get_page_id=None,
         proxy=None,
-        timeout=10,
-        webdriver_wait=5,
         max_retries=5,
         backoff_factor=0.3,
         browse_delay=0,
@@ -77,7 +75,6 @@ class Browser:
         :param callable get_page_id: function which shortens the URL into a
                                      unique ID
         :param int timeout: timeout for requests
-        :param int webdriver_wait: webdriver waiting time for page to load
         :param int max_retries: maximum number of retries on request failure
         :param float backoff_factor: delay backoff factor for request retries
         :param list[int] retry_on: HTTP status codes allowing request retry
@@ -108,7 +105,6 @@ class Browser:
         self.explored = Explored()
         self.havest_pauses = 0
         self.harvest_date = self.set_harvest_date(harvest_date)
-        self.webdriver_wait = webdriver_wait
         self.proxy = proxy
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
@@ -169,19 +165,19 @@ class Browser:
         self.get_user_agents(os.path.join(CONFIG_DIR, "user_agents"))
 
         # configure webdriver
-        user_data_dir = os.path.join(CONFIG_DIR, "user_data", "default")
+        # user_data_dir = os.path.join(CONFIG_DIR, "user_data", "default")
         driver_path = conf["selenium"]["driver_path"]
         options = webdriver.FirefoxOptions()
-        #options.add_argument("--headless")
-        #options.add_argument("--window-size=1420,1080")
-        #options.add_argument("--disable-extensions")
-        #options.add_argument("--incognito")
-        #options.add_argument("--disable-plugins-discovery")
-        #options.add_argument(f"--user-data-dir={user_data_dir}")
-        #options.add_experimental_option(
+        # options.add_argument("--headless")
+        # options.add_argument("--window-size=1420,1080")
+        # options.add_argument("--disable-extensions")
+        # options.add_argument("--incognito")
+        # options.add_argument("--disable-plugins-discovery")
+        # options.add_argument(f"--user-data-dir={user_data_dir}")
+        # options.add_experimental_option(
         #    "excludeSwitches",
         #    ["enable-automation"]
-        #)
+        # )
         self.webdriver = webdriver.Firefox(
             executable_path=driver_path,
             options=options,
@@ -315,11 +311,8 @@ class Browser:
             Key=k,
         )
 
-    @timeout()
     def get_page_contents(self, url):
         self.webdriver.get(url)
-        # wait for all page elements to load
-        time.sleep(self.webdriver_wait)
         return self.webdriver.page_source
 
     def download_page(self, url):
