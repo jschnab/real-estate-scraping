@@ -40,9 +40,8 @@ class Browser:
         get_browsable=None,
         get_parsable=None,
         get_page_id=None,
-        proxy=None,
+        timeout=60,
         max_retries=5,
-        backoff_factor=0.3,
         browse_delay=0,
         html_parser="html.parser",
         soup_parser=None,
@@ -74,9 +73,7 @@ class Browser:
                                       of the next page to parse
         :param callable get_page_id: function which shortens the URL into a
                                      unique ID
-        :param int timeout: timeout for requests
         :param int max_retries: maximum number of retries on request failure
-        :param float backoff_factor: delay backoff factor for request retries
         :param list[int] retry_on: HTTP status codes allowing request retry
         :param float browse_delay: time in seconds to wait between page
                                    downloads
@@ -94,9 +91,7 @@ class Browser:
         self.get_browsable = get_browsable
         self.get_parsable = get_parsable
         self.get_page_id = get_page_id
-        self.timeout = timeout
         self.max_retries = max_retries
-        self.backoff_factor = backoff_factor
         self.soup_parser = soup_parser
         self.session = None
         self.to_browse = deque()
@@ -311,6 +306,7 @@ class Browser:
             Key=k,
         )
 
+    @timeout(60)
     def get_page_contents(self, url):
         self.webdriver.get(url)
         return self.webdriver.page_source
@@ -321,11 +317,16 @@ class Browser:
         """
         if not url.startswith(self.base_url):
             url = urljoin(self.base_url, url)
-        for _ in range(self.max_retries):
+        for i in range(self.max_retries):
             try:
                 return self.get_page_contents(url)
             except Exception:
+                logging.error(
+                    f"retry {i+1}/{self.max_retries}: downloading "
+                    f"{cut_url(url)} failed"
+                )
                 continue
+        logging.error(f"too many retries downloading {cut_url(url)}")
         return
 
     def browse(self, initial=None):
@@ -349,7 +350,7 @@ class Browser:
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page(url=current, timeout=self.timeout)
+            content = self.download_page(current)
             time.sleep(self.browse_delay)
 
             # if download failed, push URL back to queue and
@@ -409,7 +410,7 @@ class Browser:
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page(url=current, timeout=self.timeout)
+            content = self.download_page(current)
             time.sleep(self.browse_delay)
 
             # if download failed, push URL back to queue
