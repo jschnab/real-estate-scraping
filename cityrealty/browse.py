@@ -67,3 +67,18 @@ def is_last_page(soup):
         if li.has_attr("class") and li.attrs["class"] == ["next", "ng-hide"]:
             return True
     return False
+
+
+def get_listing_id(url):
+    """
+    Get the real estate listing ID from the URL.
+    If parsing the ID fails, we return a random string.
+
+    :param str url: listing URL
+    :return str: listing ID or random string
+    """
+    match = re.search(r"\/(\w+)$", url)
+    if match:
+        return match.group(1)
+    else:
+        return "".join(random.choice(ascii_letters) for _ in range(10))

@@ -378,7 +378,7 @@ class Browser:
 
             file_prefix = self.get_page_id(current)
             logging.info(f"archiving {file_prefix}")
-            self.store_harvest(file_prefix, content)
+            self.store_harvest(file_prefix, content.encode("utf8"))
             self.delete_message(handle)
 
     def extract(self):
@@ -436,7 +436,9 @@ class Browser:
             csv_s3_key = (
                 f"{self.extract_key_prefix}/{self.harvest_date}/extract.csv"
             )
-            logging.info(f"uploading data to {self.s3_bucket}/{csv_s3_key}")
+            logging.info(
+                f"uploading data to s3://{self.s3_bucket}/{csv_s3_key}"
+            )
             client = boto3.client("s3")
             client.upload_file(
                 csv_path,

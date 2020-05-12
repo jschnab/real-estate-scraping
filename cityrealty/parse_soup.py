@@ -184,7 +184,8 @@ def get_description(soup):
     :param soup: BeautifulSoup object
     :return str: home's description
     """
-    return soup.find("div", {"class": "wysiwyg"}).text.strip()
+    text = soup.find("div", {"class": "wysiwyg"}).text.replace("\n", " ")
+    return text.strip()
 
 
 @safety_net
