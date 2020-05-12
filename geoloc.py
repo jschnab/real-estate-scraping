@@ -32,8 +32,6 @@ BING_URL = (
 HOME = str(Path.home())
 CONFIG_FILE = os.path.join(HOME, ".browsing", "browser.conf")
 
-config = ConfigParser()
-config.read(CONFIG_FILE)
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     level=logging.INFO,
@@ -160,6 +158,10 @@ def query_bing_maps(
     """
     if not session:
         session = get_session()
+    if not key:
+        config = ConfigParser()
+        config.read(CONFIG_FILE)
+        key = config["geolocation"]["bing_maps_key"]
     try:
         url = BING_URL.format(
             zipcode,
