@@ -155,7 +155,7 @@ class Browser:
         self.sqs_client = boto3.client("sqs")
         self.s3_client = boto3.client("s3")
         self.explored = Explored()
-        self.havest_pauses = 0
+        self.harvest_pauses = 0
         self.harvest_date = self.set_harvest_date(harvest_date)
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")

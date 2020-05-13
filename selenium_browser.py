@@ -25,7 +25,6 @@ import aws_utils
 from utils import cut_url, Explored, timeout
 
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
-MAX_TOR_REQ = 50
 HARVEST_PAUSE_BACKOFF = 0.3
 HARVEST_PAUSE_MAX = 60 * 30  # 30 minutes
 
@@ -38,7 +37,6 @@ class Browser:
         get_browsable=None,
         get_parsable=None,
         get_page_id=None,
-        timeout=60,
         max_retries=5,
         browse_delay=0,
         html_parser="html.parser",
@@ -95,7 +93,7 @@ class Browser:
         self.sqs_client = boto3.client("sqs")
         self.s3_client = boto3.client("s3")
         self.explored = Explored()
-        self.havest_pauses = 0
+        self.harvest_pauses = 0
         self.harvest_date = self.set_harvest_date(harvest_date)
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
@@ -154,7 +152,6 @@ class Browser:
         self.geoloc_csv_header = conf["geolocation"]["csv_header"].split(",")
 
         # configure webdriver
-        self.user_agent = ""
         # user_data_dir = os.path.join(CONFIG_DIR, "user_data")
         driver_path = conf["selenium"]["driver_path"]
         options = webdriver.FirefoxOptions()
@@ -172,9 +169,9 @@ class Browser:
             executable_path=driver_path,
             options=options,
         )
-        # self.user_agent = self.webdriver.execute_script(
-        #    "return navigator.userAgent"
-        # )
+        self.user_agent = self.webdriver.execute_script(
+           "return navigator.userAgent"
+        )
 
         logging.basicConfig(
             format="%(asctime)s %(levelname)s %(message)s",
