@@ -228,7 +228,7 @@ def add_coordinates(
             for row in reader:
                 zipcode = row["zip"]
                 burrough = row["burrough"]
-                address = row["address"].split("unit")[0]
+                address = row["address"].split("unit")[0]  # works for NYTimes
                 with get_connection() as con:
                     if not table_exists("geocache"):
                         execute_sql(CREATE_CACHE_SQL)

@@ -125,8 +125,8 @@ def get_burrough(soup):
     :param soup: BeautifulSoup object
     :return str: burrough name
     """
-    # all listing on CityRealty are in New York
-    return "New York"
+    # not available
+    return "NULL"
 
 
 @safety_net
