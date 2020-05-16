@@ -138,7 +138,7 @@ def query_bing_maps(
     zipcode,
     city,
     address,
-    key,
+    key=None,
     session=None,
     timeout=5,
     *args,
@@ -228,7 +228,14 @@ def add_coordinates(
             for row in reader:
                 zipcode = row["zip"]
                 burrough = row["burrough"]
-                address = row["address"].split("unit")[0]  # works for NYTimes
+                # for NY Times
+                if " unit " in row["address"]:
+                    address = row["address"].split("unit")[0]
+                # for CityRealty
+                elif " #" in row["address"]:
+                    address = row["address"].split("#")[0]
+                else:
+                    address = row["address"]
                 with get_connection() as con:
                     if not table_exists("geocache"):
                         execute_sql(CREATE_CACHE_SQL)
