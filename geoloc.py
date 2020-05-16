@@ -32,8 +32,6 @@ BING_URL = (
 HOME = str(Path.home())
 CONFIG_FILE = os.path.join(HOME, ".browsing", "browser.conf")
 
-config = ConfigParser()
-config.read(CONFIG_FILE)
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     level=logging.INFO,
@@ -140,7 +138,7 @@ def query_bing_maps(
     zipcode,
     city,
     address,
-    key,
+    key=None,
     session=None,
     timeout=5,
     *args,
@@ -160,6 +158,10 @@ def query_bing_maps(
     """
     if not session:
         session = get_session()
+    if not key:
+        config = ConfigParser()
+        config.read(CONFIG_FILE)
+        key = config["geolocation"]["bing_maps_key"]
     try:
         url = BING_URL.format(
             zipcode,
@@ -226,7 +228,14 @@ def add_coordinates(
             for row in reader:
                 zipcode = row["zip"]
                 burrough = row["burrough"]
-                address = row["address"].split("unit")[0]
+                # for NY Times
+                if " unit " in row["address"]:
+                    address = row["address"].split("unit")[0]
+                # for CityRealty
+                elif " #" in row["address"]:
+                    address = row["address"].split("#")[0]
+                else:
+                    address = row["address"]
                 with get_connection() as con:
                     if not table_exists("geocache"):
                         execute_sql(CREATE_CACHE_SQL)

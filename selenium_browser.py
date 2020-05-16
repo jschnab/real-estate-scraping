@@ -1,11 +1,8 @@
 import bz2
 import csv
 import glob
-import hashlib
-import json
 import logging
 import os
-import random
 import time
 
 from collections import deque
@@ -21,59 +18,15 @@ from urllib.parse import urljoin, urlparse
 import boto3
 
 from bs4 import BeautifulSoup
-from requests.adapters import HTTPAdapter
-from requests.exceptions import RequestException
-from requests.packages.urllib3.util.retry import Retry
+from selenium import webdriver
 
 import aws_utils
 
-from tor import TorSession
+from utils import cut_url, Explored, timeout
 
 CONFIG_DIR = os.path.join(str(Path.home()), ".browsing")
-MAX_TOR_REQ = 50
 HARVEST_PAUSE_BACKOFF = 0.3
 HARVEST_PAUSE_MAX = 60 * 30  # 30 minutes
-
-
-def cut_url(url):
-    """
-    If URL is longer than 50 characters, show the last 45.
-    Useful for logging.
-
-    :param str url:
-    :return str: short URL
-    """
-    if len(url) > 50:
-        return f"...{url[-45:]}"
-    return url
-
-
-class Explored:
-    def __init__(self):
-        self.explored = set()
-
-    def add(self, *args):
-        """
-        Add args to the set.
-        Note: args should be of type 'string'.
-        """
-        for a in args:
-            if not isinstance(a, str):
-                raise TypeError(f"Expected {a} to be str, got {type(a)}")
-            self.explored.add(hashlib.md5(a.encode()).hexdigest())
-
-    def contains(self, *args):
-        """
-        Check if the args are present in the set.
-        Returns True if none of the args are in the set, else False.
-        Note: args should be of type 'string'.
-        """
-        for a in args:
-            if not isinstance(a, str):
-                raise TypeError(f"Expected {a} to be str, got {type(a)}")
-            if hashlib.md5(a.encode()).hexdigest() in self.explored:
-                return True
-        return False
 
 
 class Browser:
@@ -84,12 +37,7 @@ class Browser:
         get_browsable=None,
         get_parsable=None,
         get_page_id=None,
-        headers=None,
-        user_agents=None,
-        timeout=5,
         max_retries=5,
-        backoff_factor=0.3,
-        retry_on=(500, 502, 503, 504),
         browse_delay=0,
         html_parser="html.parser",
         soup_parser=None,
@@ -121,11 +69,7 @@ class Browser:
                                       of the next page to parse
         :param callable get_page_id: function which shortens the URL into a
                                      unique ID
-        :param dict headers: request headers (excluding user agent)
-        :param list user_agents: request user agents
-        :param int timeout: timeout for requests
         :param int max_retries: maximum number of retries on request failure
-        :param float backoff_factor: delay backoff factor for request retries
         :param list[int] retry_on: HTTP status codes allowing request retry
         :param float browse_delay: time in seconds to wait between page
                                    downloads
@@ -143,14 +87,8 @@ class Browser:
         self.get_browsable = get_browsable
         self.get_parsable = get_parsable
         self.get_page_id = get_page_id
-        self.headers = headers
-        self.user_agents = user_agents
-        self.timeout = timeout
         self.max_retries = max_retries
-        self.backoff_factor = backoff_factor
-        self.retry_on = retry_on
         self.soup_parser = soup_parser
-        self.session = None
         self.to_browse = deque()
         self.sqs_client = boto3.client("sqs")
         self.s3_client = boto3.client("s3")
@@ -212,48 +150,34 @@ class Browser:
         self.geoloc_key_prefix = conf["geolocation"]["key_prefix"]
         self.extract_csv_header = conf["extract"]["csv_header"].split(",")
         self.geoloc_csv_header = conf["geolocation"]["csv_header"].split(",")
-        self.get_headers(os.path.join(CONFIG_DIR, "headers"))
-        self.get_user_agents(os.path.join(CONFIG_DIR, "user_agents"))
+
+        # configure webdriver
+        # user_data_dir = os.path.join(CONFIG_DIR, "user_data")
+        driver_path = conf["selenium"]["driver_path"]
+        options = webdriver.FirefoxOptions()
+        # options.add_argument("--headless")
+        # options.add_argument("--window-size=1420,1080")
+        # options.add_argument("--disable-extensions")
+        # options.add_argument("--incognito")
+        # options.add_argument("--disable-plugins-discovery")
+        # options.add_argument(f"--user-data-dir={user_data_dir}")
+        # options.add_experimental_option(
+        #    "excludeSwitches",
+        #    ["enable-automation"]
+        # )
+        self.webdriver = webdriver.Firefox(
+            executable_path=driver_path,
+            options=options,
+        )
+        self.user_agent = self.webdriver.execute_script(
+           "return navigator.userAgent"
+        )
 
         logging.basicConfig(
             format="%(asctime)s %(levelname)s %(message)s",
             level=logging.INFO,
             filename=os.path.join(CONFIG_DIR, "browser.log"),
             filemode="a")
-
-    def get_headers(self, file_name):
-        """
-        Read request headers (excluding user agent) from a JSON file.
-
-        :param str file_name: name of the file storing headers
-        :return dict: request headers
-        """
-        with open(file_name) as f:
-            self.headers = json.load(f)
-
-    def get_user_agents(self, file_name):
-        """
-        Read request user agents from a JSON file.
-
-        :param str file_name: name of the file storing user agents
-        :return dict: request headers
-        """
-        with open(file_name) as f:
-            self.user_agents = json.load(f)
-        self.headers["User-Agent"] = random.choice(self.user_agents)
-
-    def choose_headers(self):
-        """
-        Generate full request headers by randomly selecting a user agent
-        from the list and adding it to headers.
-        If user agents are not used, return basic headers.
-
-        :return dict: request headers
-        """
-        headers = self.headers
-        if self.user_agents:
-            headers["User-Agent"] = random.choice(self.user_agents)
-        return headers
 
     def can_fetch(self, agent, url):
         """
@@ -264,6 +188,7 @@ class Browser:
         :param str url: url to check
         :return bool: True if we can browse the page else False
         """
+        return True  # temporary
         if not url.startswith(self.base_url):
             url = urljoin(self.base_url, url)
         if self.robot_parser:
@@ -343,67 +268,32 @@ class Browser:
             Key=k,
         )
 
-    def get_session(
-        self,
-        max_retries,
-        backoff_factor,
-        retry_on,
-    ):
-        # new IP only after reset_identity() is called and new session is made
-        session = TorSession(password=os.getenv("TOR_PASSWORD"))
-        session.reset_identity()
-        session = TorSession(password=os.getenv("TOR_PASSWORD"))
+    @timeout(60)
+    def get_page_contents(self, url):
+        self.webdriver.get(url)
+        return self.webdriver.page_source
 
-        retry = Retry(
-            total=max_retries,
-            read=max_retries,
-            connect=max_retries,
-            backoff_factor=backoff_factor,
-            status_forcelist=retry_on,
-        )
-
-        adapter = HTTPAdapter(max_retries=retry)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        return session
-
-    def download_page(
-        self,
-        url,
-        timeout=None,
-    ):
+    def download_page(self, url):
         """
-        Download a web page using a Tor session.
+        Download a web page.
         """
-        # try to use self.session, if self.session does not exist
-        # get a tor session and save it in self.session
-        if not self.session or self.session.used > MAX_TOR_REQ:
-            logging.info("getting a new Tor session")
-            self.session = self.get_session(
-                max_retries=self.max_retries,
-                backoff_factor=self.backoff_factor,
-                retry_on=self.retry_on,
-            )
-            self.headers = self.choose_headers()
-
         if not url.startswith(self.base_url):
             url = urljoin(self.base_url, url)
-
-        try:
-            response = self.session.get(
-                url,
-                headers=self.headers,
-                timeout=timeout,
-            )
-            return response.text
-
-        except RequestException:
-            logging.error(f"failed to download {cut_url(url)}")
-            return
+        for i in range(self.max_retries):
+            try:
+                return self.get_page_contents(url)
+            except Exception as e:
+                logging.error(
+                    f"{e}: retry {i+1}/{self.max_retries} downloading "
+                    f"{cut_url(url)} failed"
+                )
+                continue
+        logging.error(f"too many retries downloading {cut_url(url)}")
+        return
 
     def browse(self, initial=None):
         """
-        Crawl the web in a breadth-first search fashion using Tor.
+        Crawl a website in a breadth-first search fashion.
 
         :param str initial: URL where to start browsing (suffix to append
                             to the base URL)
@@ -417,27 +307,18 @@ class Browser:
 
         while self.to_browse:
             current = self.to_browse.pop()
-            if not self.can_fetch(self.headers["User-Agent"], current):
+            if not self.can_fetch(self.user_agent, current):
                 logging.info(f"forbidden: {cut_url(current)}")
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page(url=current, timeout=self.timeout)
+            content = self.download_page(current)
             time.sleep(self.browse_delay)
 
-            # if download failed, push URL back to queue and
-            # remove proxy from list
+            # if download failed, push URL back to queue
             if content is None:
-                logging.info(
-                    "pushing URL back into queue, getting new Tor session"
-                )
+                logging.info("pushing URL back into queue")
                 self.to_browse.appendleft(current)
-                self.session = self.get_session(
-                    max_retries=self.max_retries,
-                    backoff_factor=self.backoff_factor,
-                    retry_on=self.retry_on,
-                )
-                self.headers = self.choose_headers()
                 continue
 
             logging.info("parsing page")
@@ -466,7 +347,7 @@ class Browser:
 
     def harvest(self):
         """
-        Download the web pages stored in an SQS queue using Tor.
+        Download the web pages stored in an SQS queue.
         """
         logging.info("start harvesting")
         while True:
@@ -476,34 +357,25 @@ class Browser:
                 self.pause_harvest()
                 continue
             self.harvest_pauses = 0
-            if not self.can_fetch(self.headers["User-Agent"], current):
+            if not self.can_fetch(self.user_agent, current):
                 logging.info(f"forbidden: {cut_url(current)}")
                 self.delete_message(handle)
                 continue
 
             logging.info(f"downloading {cut_url(current)}")
-            content = self.download_page(url=current, timeout=self.timeout)
+            content = self.download_page(current)
             time.sleep(self.browse_delay)
 
-            # if download failed, push URL back to queue and
-            # remove proxy from list
+            # if download failed, push URL back to queue
             if content is None:
-                logging.info(
-                    "pushing URL back to queue, getting new Tor session"
-                )
+                logging.info("pushing URL back to queue")
                 self.delete_message(handle)
                 self.push_queue(current)
-                self.session = self.get_session(
-                    max_retries=self.max_retries,
-                    backoff_factor=self.backoff_factor,
-                    retry_on=self.retry_on,
-                )
-                self.headers = self.choose_headers()
                 continue
 
             file_prefix = self.get_page_id(current)
             logging.info(f"archiving {file_prefix}")
-            self.store_harvest(file_prefix, content)
+            self.store_harvest(file_prefix, content.encode("utf8"))
             self.delete_message(handle)
 
     def extract(self):
@@ -561,7 +433,9 @@ class Browser:
             csv_s3_key = (
                 f"{self.extract_key_prefix}/{self.harvest_date}/extract.csv"
             )
-            logging.info(f"uploading data to {self.s3_bucket}/{csv_s3_key}")
+            logging.info(
+                f"uploading data to s3://{self.s3_bucket}/{csv_s3_key}"
+            )
             client = boto3.client("s3")
             client.upload_file(
                 csv_path,

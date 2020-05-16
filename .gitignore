@@ -8,3 +8,4 @@ __pycache__
 *bing_key
 *.pyc
 *nohup.out
+*.log

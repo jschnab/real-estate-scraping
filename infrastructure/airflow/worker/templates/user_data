@@ -13,7 +13,7 @@ amazon-install-extras -y epel
 yum-config-manager --enable epel*
 yum install -y git python3 gcc postgresql-devel python3-devel.x86_64 openssl-devel libcurl-devel tor
 
-pip3 install geopy psycopg2 bs4 torrequest awscli boto3 apache-airflow[celery]
+pip3 install geopy psycopg2 bs4 torrequest awscli boto3 apache-airflow[celery] selenium
 pip3 install pycurl --global-option="--with-openssl"
 
 adduser airflow
@@ -31,6 +31,10 @@ mkdir "$AIRFLOW_HOME"/.browsing
 echo "TOR_PASSWORD=$TOR_PASSWORD" >> "$AIRFLOW_ENV"
 echo "HashedControlPassword $(tor --hash-password "$TOR_PASSWORD" | grep --color=never 16:[A-Z0-9])" >> /etc/tor/torrc
 systemctl restart tor
+
+wget https://github.com/mozilla/geckodriver/releases/download/v0.26.0/geckodriver-v0.26.0-linux64.tar.gz
+tar -xzvf geckodriver-v0.26.0-linux64.tar.gz
+mv geckodriver "$AIRFLOW_HOME"/.browsing/
 
 cat << EOF > "$AIRFLOW_HOME"/airflow.cfg
 ${airflow_config}
