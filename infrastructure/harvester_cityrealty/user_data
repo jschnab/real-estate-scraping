@@ -24,6 +24,10 @@ HARVESTER_HOME=/home/harvester
 mkdir "$HARVESTER_HOME"/.browsing
 touch "$HARVESTER_HOME"/.browsing/vars.conf
 
+wget https://github.com/mozilla/geckodriver/releases/download/v0.26.0/geckodriver-v0.26.0-linux64.tar.gz
+tar -xzvf geckodriver-v0.26.0-linux64.tar.gz
+mv geckodriver "$HARVESTER_HOME"/.browsing/
+
 mkdir "$HARVESTER_HOME"/.aws
 cat << EOT > "$HARVESTER_HOME"/.aws/config
 [default]
