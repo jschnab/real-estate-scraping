@@ -395,7 +395,7 @@ class Browser:
                 headers=self.headers,
                 timeout=timeout,
             )
-            return response.text
+            return response.content
 
         except RequestException:
             logging.error(f"failed to download {cut_url(url)}")
