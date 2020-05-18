@@ -155,11 +155,11 @@ class Browser:
         # user_data_dir = os.path.join(CONFIG_DIR, "user_data")
         driver_path = conf["selenium"]["driver_path"]
         options = webdriver.FirefoxOptions()
-        # options.add_argument("--headless")
+        options.add_argument("--headless")
         # options.add_argument("--window-size=1420,1080")
-        # options.add_argument("--disable-extensions")
+        options.add_argument("--disable-extensions")
         # options.add_argument("--incognito")
-        # options.add_argument("--disable-plugins-discovery")
+        options.add_argument("--disable-plugins-discovery")
         # options.add_argument(f"--user-data-dir={user_data_dir}")
         # options.add_experimental_option(
         #    "excludeSwitches",
@@ -272,6 +272,7 @@ class Browser:
     @timeout(60)
     def get_page_contents(self, url):
         self.webdriver.get(url)
+        time.sleep(30)
         return self.webdriver.page_source
 
     def download_page(self, url):

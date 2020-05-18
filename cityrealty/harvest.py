@@ -1,3 +1,10 @@
+import os
+import sys
+
+from pathlib import Path
+
+sys.path.insert(0, os.path.join(str(Path.home()), "real-estate-scraping"))
+
 from selenium_browser import Browser
 
 
