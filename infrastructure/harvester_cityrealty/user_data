@@ -16,7 +16,7 @@ amazon-linux-extras install -y epel
 yum-config-manager --enable epel*
 yum install -y git python3 gcc postgresql-devel python3-devel.x86_64
 
-pip3 install bs4 torrequest awscli boto3
+pip3 install bs4 torrequest awscli boto3 selenium
 
 adduser harvester
 HARVESTER_HOME=/home/harvester
