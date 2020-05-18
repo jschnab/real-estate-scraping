@@ -168,6 +168,7 @@ class Browser:
         self.webdriver = webdriver.Firefox(
             executable_path=driver_path,
             options=options,
+            log_path=os.path.join(CONFIG_DIR, "geckodriver.log"),
         )
         self.user_agent = self.webdriver.execute_script(
            "return navigator.userAgent"
