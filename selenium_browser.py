@@ -272,7 +272,7 @@ class Browser:
     @timeout(60)
     def get_page_contents(self, url):
         self.webdriver.get(url)
-        time.sleep(30)
+        time.sleep(20)
         return self.webdriver.page_source
 
     def download_page(self, url):

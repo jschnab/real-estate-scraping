@@ -40,7 +40,9 @@ def browse():
 def wait_queue_empty():
     client = boto3.client("cloudwatch")
     while True:
-        response = client.describe_alarms(AlarmNames=["queue-empty"])
+        response = client.describe_alarms(
+            AlarmNames=["cityrealty-queue-empty"]
+        )
         if response.get("MetricAlarms")[0].get("StateValue") == "ALARM":
             break
         time.sleep(600)
