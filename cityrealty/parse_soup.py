@@ -161,8 +161,11 @@ def get_rep_name(soup):
     :param soup: BeautifulSoup object
     :return str: representative's name
     """
-    div = soup.find("div", {"class": "contact-wrapper"})
-    return div.find("span", {"class": "name"}).text.strip()
+    contact = soup.find("div", {"class": "contact-wrapper"})
+    if contact:
+        name = contact.find("span", {"class": "name"})
+        if name:
+            return name.text.strip()
 
 
 @safety_net
@@ -255,8 +258,10 @@ def get_property_size(soup):
     :return int: property size
     """
     text = soup.find("span", {"class": "beds_baths"}).text
-    size = re.search(r"(\d+)\sft", text).group(1)
-    return string_to_int(size)
+    match = re.search(r"(\d+)\sft", text)
+    if match:
+        size = match.group(1)
+        return string_to_int(size)
 
 
 @safety_net
@@ -286,8 +291,10 @@ def get_bedrooms(soup):
     :return int: number of bedrooms
     """
     text = soup.find("span", {"class": "beds_baths"}).text
-    beds = re.search(r"(\d+)\+? bed", text).group(1)
-    return string_to_int(beds)
+    match = re.search(r"(\d+)\+? bed", text)
+    if match:
+        beds = match.group(1)
+        return string_to_int(beds)
 
 
 @safety_net
@@ -299,8 +306,10 @@ def get_bathrooms(soup):
     :return float: number of bathrooms
     """
     text = soup.find("span", {"class": "beds_baths"}).text
-    beds = re.search(r"(\d+\.?5?) bath", text).group(1)
-    return string_to_float(beds)
+    match = re.search(r"(\d+\.?5?) bath", text)
+    if match:
+        baths = match.group(1)
+        return string_to_int(baths)
 
 
 @safety_net
@@ -312,9 +321,11 @@ def get_half_bathrooms(soup):
     :return int: number of bathrooms
     """
     text = soup.find("span", {"class": "beds_baths"}).text
-    beds = re.search(r"(\d+\.5*) bath", text).group(1)
-    if beds.endswith(".5"):
-        return 1
+    match = re.search(r"(\d+\.5*) bath", text)
+    if match:
+        baths = match.group(1)
+        if baths.endswith(".5"):
+            return 1
 
 
 @safety_net
