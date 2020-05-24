@@ -82,6 +82,25 @@ NULL {null}
 QUOTE {quote}
 ENCODING {encoding};"""
 
+COPY_TO_WITH_HEADER_SQL = """
+COPY {table_name}
+TO STDOUT
+csv
+DELIMITER {delimiter}
+NULL {null}
+HEADER
+QUOTE {quote}
+ENCODING {encoding};"""
+
+COPY_TO_NO_HEADER_SQL = """
+COPY {table_name}
+TO STDOUT
+csv
+DELIMITER {delimiter}
+NULL {null}
+QUOTE {quote}
+ENCODING {encoding};"""
+
 TABLE_EXISTS_SQL = """
 SELECT EXISTS (
     SELECT FROM pg_tables
