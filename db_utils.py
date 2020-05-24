@@ -12,6 +12,8 @@ from psycopg2 import sql
 from sql_commands import (
     COPY_FROM_NO_HEADER_SQL,
     COPY_FROM_WITH_HEADER_SQL,
+    COPY_TO_NO_HEADER_SQL,
+    COPY_TO_WITH_HEADER_SQL,
     TABLE_EXISTS_SQL,
 )
 
@@ -152,6 +154,53 @@ def copy_from(
     cur = connection.cursor()
     try:
         with open(file_name) as f:
+            cur.copy_expert(copy_command, f)
+    except Exception as e:
+        logging.critical(e)
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def copy_to(
+    file_name,
+    table_name,
+    delimiter=',',
+    null_if='NULL',
+    header=True,
+    quote='"',
+    encoding="utf-8",
+):
+    """
+    Copy a table into a CSV file.
+
+    :param str file_name: name of the file to unload the data into
+    :param str table_name: name of the table to unload data from
+    :param str delimiter: field delimiter of the file, optional (default ',')
+    :param str null_if: textual representation of NULL values in the file,
+                        optional (default 'NULL')
+    :param bool header: whether the file contains a header with column names,
+                        optional (default True)
+    :param str quote: quote character of the file, optional (default '"')
+    :param str encoding: file encoding, optional (default 'utf-8')
+    """
+    if header:
+        template = COPY_TO_WITH_HEADER_SQL
+    else:
+        template = COPY_TO_NO_HEADER_SQL
+    copy_command = sql.SQL(template).format(
+        table_name=sql.Identifier(table_name),
+        delimiter=sql.Literal(delimiter),
+        null=sql.Literal(null_if),
+        quote=sql.Literal(quote),
+        encoding=sql.Literal(encoding),
+    )
+
+    connection = get_connection(autocommit=True)
+    cur = connection.cursor()
+    try:
+        with open(file_name, "w") as f:
             cur.copy_expert(copy_command, f)
     except Exception as e:
         logging.critical(e)
