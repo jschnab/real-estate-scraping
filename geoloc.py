@@ -244,7 +244,8 @@ def add_coordinates(
                     lat, lon = cached["latitude"], cached["longitude"]
                 else:
                     lat, lon = geocode(zipcode, burrough, address, api_key)
-                    insert_cache(zipcode, burrough, address, lat, lon)
+                    if not math.isnan(lat) and not math.isnan(lon):
+                        insert_cache(zipcode, burrough, address, lat, lon)
                 if math.isnan(lat):
                     lat = "NULL"
                 if math.isnan(lon):
