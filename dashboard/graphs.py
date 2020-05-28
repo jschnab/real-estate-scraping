@@ -204,6 +204,28 @@ def plot_histograms(df):
     plt.show()
 
 
+def price_boxplot(df):
+    ny = df[(df["burrough"] == "New York") & (df["price"] < MAX_PRICE)]
+    bk = df[(df["burrough"] == "Brooklyn") & (df["price"] < MAX_PRICE)]
+    qe = df[(df["burrough"] == "Queens") & (df["price"] < MAX_PRICE)]
+    bx = df[(df["burrough"] == "Bronx") & (df["price"] < MAX_PRICE)]
+    st = df[(df["burrough"] == "Staten Island") & (df["price"] < MAX_PRICE)]
+
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.boxplot(
+        [ny["price"], bk["price"], qe["price"], bx["price"], st["price"]],
+        notch=True,
+        labels=["New York", "Brooklyn", "Queens", "Bronx", "Staten Island"],
+    )
+    ax.set_ylabel("Price ($)", fontsize=16)
+    ax.set_yticks(list(range(0, 10000, 1000)))
+    for side in ["top", "bottom", "left", "right"]:
+        ax.spines[side].set_visible(False)
+    plt.tick_params(axis="x", bottom=False)
+    plt.grid(axis="y", linestyle=":")
+    plt.show()
+
+
 if __name__ == "__main__":
     df = read_csv(CSV_PATH)
     recent = get_most_recent(df, "collection_date")
