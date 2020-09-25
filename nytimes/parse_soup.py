@@ -47,6 +47,7 @@ def string_to_int(string):
     :return int|nan:
     """
     remap = {
+        ord(","): None,
         ord("$"): None,
         ord("\xa0"): None,
     }

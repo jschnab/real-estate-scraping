@@ -51,6 +51,7 @@ def string_to_int(string):
     :return int|nan:
     """
     remap = {
+        ord(","): None,
         ord("$"): None,
         ord("\xa0"): None,
     }
@@ -258,7 +259,7 @@ def get_property_size(soup):
     :return int: property size
     """
     text = soup.find("span", {"class": "beds_baths"}).text
-    match = re.search(r"(\d+)\sft", text)
+    match = re.search(r"((\d,)?\d+)\sft", text)
     if match:
         size = match.group(1)
         return string_to_int(size)

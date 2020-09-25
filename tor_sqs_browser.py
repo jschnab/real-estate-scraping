@@ -166,7 +166,7 @@ class Browser:
         # parse the robots.txt file
         try:
             self.robot_parser = RobotFileParser()
-            self.robot_parser.set_url(urljoin(base_url, "robots.txt"))
+            self.robot_parser.set_url(urljoin(self.base_url, "robots.txt"))
             self.robot_parser.read()
             if self.robot_parser.crawl_delay(""):
                 self.browse_delay = self.robot_parser.crawl_delay("")
