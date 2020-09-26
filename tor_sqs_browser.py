@@ -288,7 +288,10 @@ class Browser:
         :return str: receipt handle of the message (for deletion of the
                      message)
         """
-        response = self.sqs_client.receive_message(QueueUrl=self.sqs_queue)
+        response = self.sqs_client.receive_message(
+            QueueUrl=self.sqs_queue,
+            WaitTimeSeconds=10,
+        )
         if response:
             messages = response.get("Messages")
             if messages:
