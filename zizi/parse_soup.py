@@ -2,6 +2,11 @@ import functools
 import logging
 import math
 import re
+import sys
+
+sys.path.insert(0, "../")
+
+from neighborhood_burrough_mapping import NEIGHBORHOOD_BURROUGH_MAPPING
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
@@ -138,6 +143,7 @@ def get_burrough(soup):
     splitted = address.split(",")[-1].strip()
     if splitted.lower() in BURROUGHS:
         return splitted
+    return NEIGHBORHOOD_BURROUGH_MAPPING.get(splitted.lower(), "NULL")
 
 
 @safety_net

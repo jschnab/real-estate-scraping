@@ -3,6 +3,11 @@ import functools
 import logging
 import math
 import re
+import sys
+
+sys.path.insert(0, "/home/jonathans/real-estate-scraping")
+
+from neighborhood_burrough_mapping import NEIGHBORHOOD_BURROUGH_MAPPING
 
 from datetime import datetime
 from urllib.parse import urlparse
@@ -126,8 +131,8 @@ def get_burrough(soup):
     :param soup: BeautifulSoup object
     :return str: burrough name
     """
-    # not available
-    return "NULL"
+    neighborhood = get_neighborhood(soup).lower()
+    return NEIGHBORHOOD_BURROUGH_MAPPING.get(neighborhood, "NULL")
 
 
 @safety_net
@@ -307,7 +312,7 @@ def get_bathrooms(soup):
     :return float: number of bathrooms
     """
     text = soup.find("span", {"class": "beds_baths"}).text
-    match = re.search(r"(\d+\.?5?) bath", text)
+    match = re.search(r"(\d+)(\.5)? bath", text)
     if match:
         baths = match.group(1)
         return string_to_int(baths)
@@ -322,11 +327,9 @@ def get_half_bathrooms(soup):
     :return int: number of bathrooms
     """
     text = soup.find("span", {"class": "beds_baths"}).text
-    match = re.search(r"(\d+\.5*) bath", text)
-    if match:
-        baths = match.group(1)
-        if baths.endswith(".5"):
-            return 1
+    match = re.search(r"\d+(\.5)? bath", text)
+    if match and match.group(1) == ".5":
+        return 1
 
 
 @safety_net

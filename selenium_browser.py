@@ -200,7 +200,7 @@ class Browser:
         :param str url: url to check
         :return bool: True if we can browse the page else False
         """
-        return True  # temporary
+        #return True  # temporary
         if not url.startswith(self.base_url):
             url = urljoin(self.base_url, url)
         if self.robot_parser:

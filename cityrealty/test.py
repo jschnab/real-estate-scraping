@@ -9,8 +9,8 @@ sys.path.insert(0, "/home/jonathans/real-estate-scraping")
 
 from selenium_browser import Browser
 
-BASE_URL = "https://www.zillow.com"
-CONFIG_FILE = "/home/jonathans/.browsing/zillow.conf"
+BASE_URL = "https://www.cityrealty.com"
+CONFIG_FILE = "/home/jonathans/.browsing/cityrealty.conf"
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
@@ -36,7 +36,9 @@ to_parse = set(browser.get_parsable(soup))
 logging.info(f"found {len(to_parse)} pages to parse: {to_parse}")
 
 for i, url in enumerate(to_parse):
-    logging.info(f"parsing page {browser.get_page_id(url)}")
+    if i > 9:
+        break
+    logging.info(f"parsing {url}")
     content = browser.download_page(url)
     soup = browser.html_parser(content)
     data = browser.soup_parser(soup)
