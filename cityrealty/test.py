@@ -36,8 +36,6 @@ to_parse = set(browser.get_parsable(soup))
 logging.info(f"found {len(to_parse)} pages to parse: {to_parse}")
 
 for i, url in enumerate(to_parse):
-    if i > 9:
-        break
     logging.info(f"parsing {url}")
     content = browser.download_page(url)
     soup = browser.html_parser(content)
