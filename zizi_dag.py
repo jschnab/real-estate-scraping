@@ -16,28 +16,29 @@ from airflow.utils.dates import days_ago
 sys.path.insert(0, os.path.join(str(Path.home()), "real-estate-scraping"))
 
 import geoloc
-import cityrealty.browse
-import cityrealty.parse_soup
+import zizi.browse
+import zizi.parse_soup
 
 from aws_utils import download_file
 from db_utils import copy_from, execute_sql, table_exists
 from sql_commands import CREATE_TABLE_RENTALS_SQL
 from selenium_browser import Browser
 
-BASE_URL = "https://www.cityrealty.com"
-CONFIG_FILE = "cityrealty.conf"
+BASE_URL = "https://www.zillow.com"
+CONFIG_FILE = "zillow.conf"
 
 
 def browse():
     crawler = Browser(
         base_url=BASE_URL,
-        stop_test=cityrealty.browse.is_last_page,
-        get_browsable=cityrealty.browse.wrapper_next_page,
-        get_parsable=cityrealty.browse.get_listings,
-        get_page_id=cityrealty.browse.get_listing_id,
+        stop_test=zizi.browse.is_last_page,
+        get_browsable=zizi.browse.wrapper_next_page,
+        get_parsable=zizi.browse.get_listings,
+        get_page_id=zizi.browse.get_listing_id,
+        wait_page_load=30,
         config_file=CONFIG_FILE,
     )
-    crawler.browse(cityrealty.browse.BEGIN_RENT_LISTINGS)
+    crawler.browse(zizi.browse.BEGIN_RENT_LISTINGS)
     crawler.close()
 
 
@@ -45,7 +46,7 @@ def wait_queue_empty():
     client = boto3.client("cloudwatch")
     while True:
         response = client.describe_alarms(
-            AlarmNames=["cityrealty-queue-empty"]
+            AlarmNames=["zillow-queue-empty"]
         )
         if response.get("MetricAlarms")[0].get("StateValue") == "ALARM":
             break
@@ -55,8 +56,9 @@ def wait_queue_empty():
 def extract(**context):
     crawler = Browser(
         base_url=BASE_URL,
-        soup_parser=cityrealty.parse_soup.parse_webpage,
+        soup_parser=zizi.parse_soup.parse_webpage,
         harvest_date=context["ds_nodash"],
+        wait_page_load=30,
         config_file=CONFIG_FILE,
     )
     crawler.extract()
@@ -77,13 +79,13 @@ def add_geolocation(**context):
 def load(**context):
     config_file = os.path.join(
         str(Path.home()), ".browsing",
-        CONFIG_FILE
+        CONFIG_FILE,
     )
     config = ConfigParser()
     config.read(config_file)
     date_obj = datetime.strptime(context["ds_nodash"], "%Y%m%d")
     date_str = date_obj.strftime("%Y/%m/%d")
-    csv_s3_key = f"coordinates/cityrealty/{date_str}/coordinates.csv"
+    csv_s3_key = f"coordinates/zillow/{date_str}/coordinates.csv"
     with TemporaryDirectory() as temp_dir:
         download_file(
             config["s3"]["bucket"],
@@ -102,7 +104,7 @@ default_args = {
 }
 
 dag = DAG(
-    dag_id="cityrealty_scraping",
+    dag_id="zillow_scraping",
     default_args=default_args,
     schedule_interval=None,
 )

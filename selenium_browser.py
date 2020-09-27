@@ -39,6 +39,7 @@ class Browser:
         get_page_id=None,
         max_retries=5,
         browse_delay=0,
+        wait_page_load=20,
         html_parser="html.parser",
         soup_parser=None,
         geolocator=None,
@@ -73,6 +74,8 @@ class Browser:
         :param list[int] retry_on: HTTP status codes allowing request retry
         :param float browse_delay: time in seconds to wait between page
                                    downloads
+        :param float wait_page_load: time in seconds to wait for a page to
+                                     load before downloading contents
         :param str html_parser: parser to use with BeautifulSoup, e.g.
                                 'html.parser', 'lxml', etc
         :param callable soup_parser: function to use to parse the HTML tags
@@ -88,6 +91,7 @@ class Browser:
         self.get_parsable = get_parsable
         self.get_page_id = get_page_id
         self.max_retries = max_retries
+        self.wait_page_load = wait_page_load
         self.soup_parser = soup_parser
         self.to_browse = deque()
         self.sqs_client = boto3.client("sqs")
@@ -156,7 +160,7 @@ class Browser:
         driver_path = conf["selenium"]["driver_path"]
         options = webdriver.FirefoxOptions()
         options.add_argument("--headless")
-        # options.add_argument("--window-size=1420,1080")
+        options.add_argument("--window-size=1420,1080")
         options.add_argument("--disable-extensions")
         # options.add_argument("--incognito")
         options.add_argument("--disable-plugins-discovery")
@@ -180,6 +184,13 @@ class Browser:
             filename=os.path.join(CONFIG_DIR, "browser.log"),
             filemode="a")
 
+    def close(self):
+        """
+        Close the webdriver.
+        This is important to avoid accumulation of webdriver processes.
+        """
+        self.webdriver.close()
+
     def can_fetch(self, agent, url):
         """
         Checks the robots.txt file if we can fetch the page.
@@ -189,7 +200,7 @@ class Browser:
         :param str url: url to check
         :return bool: True if we can browse the page else False
         """
-        return True  # temporary
+        #return True  # temporary
         if not url.startswith(self.base_url):
             url = urljoin(self.base_url, url)
         if self.robot_parser:
@@ -214,7 +225,8 @@ class Browser:
         :return str: receipt handle of the message (for deletion of the
                      message)
         """
-        response = self.sqs_client.receive_message(QueueUrl=self.sqs_queue)
+        response = self.sqs_client.receive_message(
+            QueueUrl=self.sqs_queue, WaitTimeSeconds=20)
         if response:
             messages = response.get("Messages")
             if messages:
@@ -272,7 +284,7 @@ class Browser:
     @timeout(60)
     def get_page_contents(self, url):
         self.webdriver.get(url)
-        time.sleep(20)
+        time.sleep(self.wait_page_load)
         return self.webdriver.page_source
 
     def download_page(self, url):
@@ -345,7 +357,7 @@ class Browser:
                 if self.explored.contains(child):
                     continue
                 self.explored.add(child)
-                self.to_browse.append(child)
+                self.to_browse.appendleft(child)
 
     def harvest(self):
         """
