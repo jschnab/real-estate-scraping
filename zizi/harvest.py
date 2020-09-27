@@ -17,6 +17,7 @@ def main():
         config_file="zillow.conf",
     )
     crawler.harvest()
+    crawler.close()
 
 
 if __name__ == "__main__":

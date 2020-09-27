@@ -16,6 +16,7 @@ def main():
         config_file="cityrealty.conf",
     )
     crawler.harvest()
+    crawler.close()
 
 
 if __name__ == "__main__":

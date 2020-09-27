@@ -39,6 +39,7 @@ def browse():
         config_file=CONFIG_FILE,
     )
     crawler.browse(zizi.browse.BEGIN_RENT_LISTINGS)
+    crawler.close()
 
 
 def wait_queue_empty():
@@ -61,6 +62,7 @@ def extract(**context):
         config_file=CONFIG_FILE,
     )
     crawler.extract()
+    crawler.close()
 
 
 def add_geolocation(**context):
@@ -71,15 +73,16 @@ def add_geolocation(**context):
         geolocator=geoloc.add_coordinates,
     )
     crawler.geolocalize()
+    crawler.close()
 
 
 def load(**context):
-    CONFIG_FILE = os.path.join(
+    config_file = os.path.join(
         str(Path.home()), ".browsing",
         CONFIG_FILE,
     )
     config = ConfigParser()
-    config.read(CONFIG_FILE)
+    config.read(config_file)
     date_obj = datetime.strptime(context["ds_nodash"], "%Y%m%d")
     date_str = date_obj.strftime("%Y/%m/%d")
     csv_s3_key = f"coordinates/zillow/{date_str}/coordinates.csv"

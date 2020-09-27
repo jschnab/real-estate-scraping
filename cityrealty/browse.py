@@ -1,5 +1,7 @@
+import random
 import re
 
+from string import ascii_letters
 from urllib.parse import urljoin
 
 BASE_URL = "https://www.cityrealty.com"

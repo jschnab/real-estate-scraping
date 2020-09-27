@@ -184,6 +184,13 @@ class Browser:
             filename=os.path.join(CONFIG_DIR, "browser.log"),
             filemode="a")
 
+    def close(self):
+        """
+        Close the webdriver.
+        This is important to avoid accumulation of webdriver processes.
+        """
+        self.webdriver.close()
+
     def can_fetch(self, agent, url):
         """
         Checks the robots.txt file if we can fetch the page.

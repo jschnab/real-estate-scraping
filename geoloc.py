@@ -230,10 +230,15 @@ def add_coordinates(
                 burrough = row["burrough"]
                 # for NY Times
                 if " unit " in row["address"]:
+                    # following line should strip, need to clean database
                     address = row["address"].split("unit")[0]
-                # for CityRealty
+                # for CityRealty and Zillow
                 elif " #" in row["address"]:
+                    # following line should strip, need to clean database
                     address = row["address"].split("#")[0]
+                # for Zillow
+                elif " APT " in row["address"]:
+                    address = row["address"].split(" APT ")[0]
                 else:
                     address = row["address"]
                 with get_connection() as con:

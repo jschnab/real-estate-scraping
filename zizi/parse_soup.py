@@ -8,6 +8,8 @@ logging.basicConfig(
     level=logging.INFO,
 )
 
+BURROUGHS = {"bronx", "brooklyn", "new york", "queens", "staten island"}
+
 
 def safety_net(func):
     @functools.wraps(func)
@@ -99,8 +101,11 @@ def get_neighborhood(soup):
     :param soup: BeautifulSoup object
     :return str: neighborhood name
     """
-    # no information available on website
-    return
+    # try to parse neighborhood from address
+    address = get_address(soup)
+    splitted = address.split(",")[-1].strip()
+    if splitted.lower() not in BURROUGHS:
+        return splitted
 
 
 @safety_net
@@ -128,8 +133,11 @@ def get_burrough(soup):
     :param soup: BeautifulSoup object
     :return str: burrough name
     """
-    # no information available on website
-    return
+    # try to parse burrough from address
+    address = get_address(soup)
+    splitted = address.split(",")[-1].strip()
+    if splitted.lower() in BURROUGHS:
+        return splitted
 
 
 @safety_net

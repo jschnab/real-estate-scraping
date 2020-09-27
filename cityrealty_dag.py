@@ -24,17 +24,21 @@ from db_utils import copy_from, execute_sql, table_exists
 from sql_commands import CREATE_TABLE_RENTALS_SQL
 from selenium_browser import Browser
 
+BASE_URL = "https://www.cityrealty.com"
+CONFIG_FILE = "cityrealty.conf"
+
 
 def browse():
     crawler = Browser(
-        base_url="https://www.cityrealty.com",
+        base_url=BASE_URL,
         stop_test=cityrealty.browse.is_last_page,
         get_browsable=cityrealty.browse.wrapper_next_page,
         get_parsable=cityrealty.browse.get_listings,
         get_page_id=cityrealty.browse.get_listing_id,
-        config_file="cityrealty.conf",
+        config_file=CONFIG_FILE,
     )
     crawler.browse(cityrealty.browse.BEGIN_RENT_LISTINGS)
+    crawler.close()
 
 
 def wait_queue_empty():
@@ -50,31 +54,33 @@ def wait_queue_empty():
 
 def extract(**context):
     crawler = Browser(
-        base_url="https://www.cityrealty.com",
+        base_url=BASE_URL,
         soup_parser=cityrealty.parse_soup.parse_webpage,
         harvest_date=context["ds_nodash"],
-        config_file="cityrealty.conf",
+        config_file=CONFIG_FILE,
     )
     crawler.extract()
+    crawler.close()
 
 
 def add_geolocation(**context):
     crawler = Browser(
-        base_url="https://www.cityrealty.com",
+        base_url=BASE_URL,
         harvest_date=context["ds_nodash"],
-        config_file="cityrealty.conf",
+        config_file=CONFIG_FILE,
         geolocator=geoloc.add_coordinates,
     )
     crawler.geolocalize()
+    crawler.close()
 
 
 def load(**context):
-    CONFIG_FILE = os.path.join(
+    config_file = os.path.join(
         str(Path.home()), ".browsing",
-        "cityrealty.conf"
+        CONFIG_FILE
     )
     config = ConfigParser()
-    config.read(CONFIG_FILE)
+    config.read(config_file)
     date_obj = datetime.strptime(context["ds_nodash"], "%Y%m%d")
     date_str = date_obj.strftime("%Y/%m/%d")
     csv_s3_key = f"coordinates/cityrealty/{date_str}/coordinates.csv"
