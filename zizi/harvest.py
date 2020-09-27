@@ -13,6 +13,7 @@ def main():
     crawler = Browser(
         base_url="https://www.zillow.com",
         get_page_id=get_listing_id,
+        wait_page_load=30,
         config_file="zillow.conf",
     )
     crawler.harvest()

@@ -289,9 +289,7 @@ class Browser:
                      message)
         """
         response = self.sqs_client.receive_message(
-            QueueUrl=self.sqs_queue,
-            WaitTimeSeconds=10,
-        )
+            QueueUrl=self.sqs_queue, WaitTimeSeconds=20)
         if response:
             messages = response.get("Messages")
             if messages:

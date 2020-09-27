@@ -190,7 +190,8 @@ def get_description(soup):
     :return str: home's description
     """
     overview = soup.find("div", {"class": "ds-overview-section"})
-    return overview.next.text
+    text = overview.next.text
+    return text.replace("\n", " ")
 
 
 @safety_net
@@ -248,6 +249,7 @@ def get_monthly_taxes(soup):
     :return str: monthly taxes
     """
     # not available
+    return
 
 
 @safety_net

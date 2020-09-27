@@ -35,6 +35,7 @@ def browse():
         get_browsable=zizi.browse.wrapper_next_page,
         get_parsable=zizi.browse.get_listings,
         get_page_id=zizi.browse.get_listing_id,
+        wait_page_load=30,
         config_file=CONFIG_FILE,
     )
     crawler.browse(zizi.browse.BEGIN_RENT_LISTINGS)
@@ -56,6 +57,7 @@ def extract(**context):
         base_url=BASE_URL,
         soup_parser=zizi.parse_soup.parse_webpage,
         harvest_date=context["ds_nodash"],
+        wait_page_load=30,
         config_file=CONFIG_FILE,
     )
     crawler.extract()

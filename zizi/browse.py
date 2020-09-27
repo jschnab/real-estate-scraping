@@ -12,7 +12,7 @@ logging.basicConfig(
 
 BASE_URL = "https://www.zillow.com"
 
-BEGIN_RENT_LISTINGS = "https://www.zillow.com/ny/apartments/"
+BEGIN_RENT_LISTINGS = "https://www.zillow.com/new-york-ny/rentals/"
 
 LISTING_PREFIX = urljoin(BASE_URL, "homedetails")
 
@@ -53,15 +53,14 @@ def get_next_page(url):
     :param str url: current URL
     :return str: URL of the next page containing listings to crawl
     """
-    match = re.search(r"/p_\d+", url)
+    match = re.search(r".*/(\d+)_p/", url)
     if match:
-        group = match.group(0)
-        next_number = int(group.split("=")[-1]) + 1
-        next_url = urljoin(BEGIN_RENT_LISTINGS, f"{next_number}_p")
+        next_number = int(match.group(1)) + 1
+        next_url = urljoin(BEGIN_RENT_LISTINGS, f"{next_number}_p/")
         return next_url
-    # the first page has no page index
     else:
-        return urljoin(BEGIN_RENT_LISTINGS, "2_p")
+        # the first page has no page index
+        return urljoin(BEGIN_RENT_LISTINGS, "2_p/")
 
 
 def wrapper_next_page(url):
@@ -87,14 +86,13 @@ def is_last_page(soup):
     """
     meta = soup.find("meta", {"property": "og:url"})
     if meta.has_attr("content"):
-        page_number = re.search(r".*/(\d+)_p/", meta.attrs["content"]).group(1)
-        if page_number == 20:
-            return True
-        else:
-            return False
-    else:
-        logging.warning("cannot determine if last page was reached, stopping")
-        return True
+        page_number = re.search(r".*/(\d+)_p/", meta.attrs["content"])
+        if page_number:
+            return page_number.group(1) == "20"
+        if re.search(r"/rentals/$", meta.attrs["content"]):
+            return False  # we are at the first page
+    logging.warning("cannot determine if last page was reached, stopping")
+    return True
 
 
 def get_listing_id(url):
