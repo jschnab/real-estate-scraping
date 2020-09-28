@@ -39,6 +39,7 @@ class Browser:
         get_page_id=None,
         max_retries=5,
         browse_delay=0,
+        check_can_fetch=True,
         wait_page_load=20,
         html_parser="html.parser",
         soup_parser=None,
@@ -74,6 +75,8 @@ class Browser:
         :param list[int] retry_on: HTTP status codes allowing request retry
         :param float browse_delay: time in seconds to wait between page
                                    downloads
+        :param bool check_can_fetch: check if robots.txt allows scraping
+                                     before downloading a page
         :param float wait_page_load: time in seconds to wait for a page to
                                      load before downloading contents
         :param str html_parser: parser to use with BeautifulSoup, e.g.
@@ -91,6 +94,7 @@ class Browser:
         self.get_parsable = get_parsable
         self.get_page_id = get_page_id
         self.max_retries = max_retries
+        self.check_can_fetch = check_can_fetch
         self.wait_page_load = wait_page_load
         self.soup_parser = soup_parser
         self.to_browse = deque()
@@ -123,7 +127,10 @@ class Browser:
         # apply config
         self.config_path = os.path.join(CONFIG_DIR, config_file)
         if Path(self.config_path).exists():
+            logging.info(f"reading config '{self.config_path}'")
             self.configure(self.config_path)
+        else:
+            logging.warning(f"config file not found: '{self.config_path}'")
 
     def set_harvest_date(self, date):
         """
@@ -200,7 +207,6 @@ class Browser:
         :param str url: url to check
         :return bool: True if we can browse the page else False
         """
-        #return True  # temporary
         if not url.startswith(self.base_url):
             url = urljoin(self.base_url, url)
         if self.robot_parser:
@@ -321,9 +327,10 @@ class Browser:
 
         while self.to_browse:
             current = self.to_browse.pop()
-            if not self.can_fetch(self.user_agent, current):
-                logging.info(f"forbidden: {cut_url(current)}")
-                continue
+            if self.check_can_fetch:
+                if not self.can_fetch(self.user_agent, current):
+                    logging.info(f"forbidden: {cut_url(current)}")
+                    continue
 
             logging.info(f"downloading {cut_url(current)}")
             content = self.download_page(current)
@@ -371,10 +378,11 @@ class Browser:
                 self.pause_harvest()
                 continue
             self.harvest_pauses = 0
-            if not self.can_fetch(self.user_agent, current):
-                logging.info(f"forbidden: {cut_url(current)}")
-                self.delete_message(handle)
-                continue
+            if self.check_can_fetch:
+                if not self.can_fetch(self.user_agent, current):
+                    logging.info(f"forbidden: {cut_url(current)}")
+                    self.delete_message(handle)
+                    continue
 
             logging.info(f"downloading {cut_url(current)}")
             content = self.download_page(current)
