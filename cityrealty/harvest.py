@@ -14,6 +14,7 @@ def main():
         base_url="https://www.cityrealty.com",
         get_page_id=get_listing_id,
         config_file="cityrealty.conf",
+        check_can_fetch=False,
     )
     crawler.harvest()
     crawler.close()
