@@ -35,6 +35,7 @@ def browse():
         get_browsable=cityrealty.browse.wrapper_next_page,
         get_parsable=cityrealty.browse.get_listings,
         get_page_id=cityrealty.browse.get_listing_id,
+        check_can_fetch=False,
         config_file=CONFIG_FILE,
     )
     crawler.browse(cityrealty.browse.BEGIN_RENT_LISTINGS)
@@ -57,6 +58,7 @@ def extract(**context):
         base_url=BASE_URL,
         soup_parser=cityrealty.parse_soup.parse_webpage,
         harvest_date=context["ds_nodash"],
+        check_can_fetch=False,
         config_file=CONFIG_FILE,
     )
     crawler.extract()
@@ -69,6 +71,7 @@ def add_geolocation(**context):
         harvest_date=context["ds_nodash"],
         config_file=CONFIG_FILE,
         geolocator=geoloc.add_coordinates,
+        check_can_fetch=False,
     )
     crawler.geolocalize()
     crawler.close()
