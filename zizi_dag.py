@@ -37,6 +37,7 @@ def browse():
         get_page_id=zizi.browse.get_listing_id,
         wait_page_load=30,
         config_file=CONFIG_FILE,
+        check_can_fetch=False,
     )
     crawler.browse(zizi.browse.BEGIN_RENT_LISTINGS)
     crawler.close()
@@ -60,6 +61,7 @@ def extract(**context):
         harvest_date=context["ds_nodash"],
         wait_page_load=30,
         config_file=CONFIG_FILE,
+        check_can_fetch=False,
     )
     crawler.extract()
     crawler.close()
@@ -71,6 +73,7 @@ def add_geolocation(**context):
         harvest_date=context["ds_nodash"],
         config_file=CONFIG_FILE,
         geolocator=geoloc.add_coordinates,
+        check_can_fetch=False,
     )
     crawler.geolocalize()
     crawler.close()
