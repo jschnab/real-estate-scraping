@@ -4,6 +4,9 @@ import math
 import re
 import sys
 
+from datetime import datetime
+from string import punctuation
+
 sys.path.insert(0, "../")
 
 from neighborhood_burrough_mapping import NEIGHBORHOOD_BURROUGH_MAPPING
@@ -14,6 +17,7 @@ logging.basicConfig(
 )
 
 BURROUGHS = {"bronx", "brooklyn", "new york", "queens", "staten island"}
+ZIP_REGEX = r"\s(1\d{4})[\s,$]"
 
 
 def safety_net(func):
@@ -21,9 +25,23 @@ def safety_net(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception:
-            logging.error(f"html tag parsing failed with '{func.__name__}'")
+        except Exception as e:
+            logging.error(
+                f"html tag parsing failed with '{func.__name__}' "
+                f"with error: {e}"
+            )
     return wrapper
+
+
+def clean_string(string):
+    """
+    Remove unwanted characters from strings (sybols, HTML characters, etc).
+
+    :param str string: string to clean
+    :returns: str - cleaned string
+    """
+    remap = {ord(c): None for c in ("$", ",", "\xa0")}
+    return string.translate(remap).strip()
 
 
 def string_to_float(string):
@@ -33,12 +51,7 @@ def string_to_float(string):
     :param str string: string to convert
     :return float:
     """
-    remap = {
-        ord(","): None,
-        ord("$"): None,
-        ord("\xa0"): None,
-    }
-    clean = string.translate(remap)
+    clean = clean_string(string)
     try:
         return float(clean)
     except ValueError:
@@ -53,12 +66,7 @@ def string_to_int(string):
     :param str string: string to convert
     :return int|nan:
     """
-    remap = {
-        ord(","): None,
-        ord("$"): None,
-        ord("\xa0"): None,
-    }
-    clean = string.translate(remap)
+    clean = clean_string(string)
     try:
         return int(clean)
     except ValueError:
@@ -93,9 +101,35 @@ def get_rent_price(soup):
     :param soup: BeautifulSoup object
     :return float: rental price
     """
-    details = soup.find("div", {"class": "ds-home-details-chip"})
-    value = details.find("span", {"class": "ds-value"})
-    return string_to_float(value.text)
+    price = soup.find("span", {"class": "price"})
+    return string_to_float(price.text)
+
+
+@safety_net
+def get_location_from_title(soup):
+    """
+    Extract and clean location from rent title in the tag soup.
+
+    :param soup: BeautifulSoup object
+    :return str: location name
+    """
+    title = soup.find("span", {"class": "postingtitletext"})
+    location = title.find("small").text.lower()
+    location = location.replace("near ", "").strip()
+    location = location.replace(" ny", "").strip()
+    location = location.replace("prime ", "").strip()
+    for char in ("/", "@", ","):
+        if char in location:
+            location = location.split(char)[0].strip()
+    street_number = re.search(r"(\s\d+.*)$", location)
+    if street_number:
+        location = location[:len(street_number.group(0))]
+
+    # remove punctuation characters
+    remap = {ord(p): None for p in punctuation}
+    location = location.translate(remap).strip()
+
+    return location
 
 
 @safety_net
@@ -106,11 +140,9 @@ def get_neighborhood(soup):
     :param soup: BeautifulSoup object
     :return str: neighborhood name
     """
-    # try to parse neighborhood from address
-    address = get_address(soup)
-    splitted = address.split(",")[-1].strip()
-    if splitted.lower() not in BURROUGHS:
-        return splitted
+    location = get_location_from_title(soup)
+    if location not in BURROUGHS:
+        return location.title()
 
 
 @safety_net
@@ -121,13 +153,12 @@ def get_address(soup):
     :param soup: BeautifulSoup object
     :return str: street address
     """
-    container = soup.find("h1", {"class": "ds-address-container"})
-    address = "".join(
-        child.text for child in container.children).replace(u"\xa0", " ")
-    found_zip = re.search(r",\sNY\s\d{5}", address)
-    if found_zip:
-        return address[:found_zip.span()[0]]
-    return address
+    address = soup.find("div", {"class": "mapaddress"})
+    if address is not None:
+        address = address.text.lower()
+        if " near " in address:
+            return address.split(" near ")[0]
+        return address
 
 
 @safety_net
@@ -138,12 +169,10 @@ def get_burrough(soup):
     :param soup: BeautifulSoup object
     :return str: burrough name
     """
-    # try to parse burrough from address
-    address = get_address(soup)
-    splitted = address.split(",")[-1].strip()
-    if splitted.lower() in BURROUGHS:
-        return splitted
-    return NEIGHBORHOOD_BURROUGH_MAPPING.get(splitted.lower(), "NULL")
+    location = get_location_from_title(soup)
+    if location in BURROUGHS:
+        return location.title()
+    return NEIGHBORHOOD_BURROUGH_MAPPING.get(location.lower(), "NULL")
 
 
 @safety_net
@@ -152,14 +181,21 @@ def get_zip(soup):
     Get burrough name from the tag soup.
 
     :param soup: BeautifulSoup object
-    :return str: burrough name
+    :return str: zip code
     """
-    container = soup.find("h1", {"class": "ds-address-container"})
-    address = "".join(
-        child.text for child in container.children).replace(u"\xa0", " ")
-    found_zip = re.search(r",\sNY\s(\d{5})", address)
-    if found_zip:
-        return found_zip.group(1)
+    # try to parse zipcode from address
+    address = get_address(soup)
+    if address is not None:
+        zipcode = re.search(ZIP_REGEX, address)
+        if zipcode:
+            return zipcode.group(1)
+
+    # try to parse zipcode from description
+    description = get_description(soup)
+    if description is not None:
+        zipcode = re.search(ZIP_REGEX, description)
+        if zipcode:
+            return zipcode.group(1)
 
 
 @safety_net
@@ -170,7 +206,8 @@ def get_property_type(soup):
     :param soup: BeautifulSoup object
     :return str: property type
     """
-    return soup.find("i", {"class": "zsg-icon-buildings"}).next.next.next.text
+    # not available
+    return
 
 
 @safety_net
@@ -181,7 +218,8 @@ def get_rep_name(soup):
     :param soup: BeautifulSoup object
     :return str: representative's name
     """
-    return soup.find("span", {"class": "ds-listing-agent-display-name"}).text
+    # not available
+    return
 
 
 @safety_net
@@ -192,7 +230,25 @@ def get_agency_url(soup):
     :param soup: BeautifulSoup object
     :return str: agency's URL
     """
-    return soup.find("span", {"class": "ds-listing-agent-business-name"}).text
+    # try to get agency URL from description
+    description = get_description(soup)
+    website = re.search(r"www\..*\.(com|net)", description)
+    if website:
+        return website.group(0)
+
+
+@safety_net
+def get_coordinates(soup):
+    """
+    Get latitude and longitude of the home from the map.
+
+    :param soup: BeautifulSoup object
+    :return tuple[float, float]: latitude and longitude
+    """
+    map_ = soup.find("div", {"id": "map"})
+    latitude = string_to_float(map_.attrs["data-latitude"])
+    longitude = string_to_float(map_.attrs["data-longitude"])
+    return latitude, longitude
 
 
 @safety_net
@@ -203,9 +259,21 @@ def get_description(soup):
     :param soup: BeautifulSoup object
     :return str: home's description
     """
-    overview = soup.find("div", {"class": "ds-overview-section"})
-    text = overview.next.text
-    return text.replace("\n", " ")
+    description = soup.find("section", {"id": "postingbody"}).text.strip()
+
+    # remove unnecessary comments and characters
+    description = description.replace("\n", " ").replace("\xa0", " ").strip()
+    boilerplate = "qr code link to this post"
+    if description.lower().startswith(boilerplate):
+        description = description[len(boilerplate):].strip()
+
+    # add latitude and longitude from map
+    # because the low quality of address impairs the geolocation step
+    lat, lon = get_coordinates(soup)
+    if not math.isnan(lat) and not math.isnan(lon):
+        description += f" lat:{lat};lon:{lon}"
+
+    return description
 
 
 @safety_net
@@ -216,30 +284,11 @@ def get_amenities(soup):
     :param soup: BeautifulSoup object
     :return str: amenities
     """
-    default_text = "contact manager"
-    amenities_list = []
-    for amenity in soup.find_all("li", {"class": "ds-home-fact-list-item"}):
-        if "zsg-icon-snowflake" in amenity.next.attrs["class"]:
-            text = amenity.next.next.next.next.text.lower()
-            if text != default_text:
-                amenities_list.append(f"cooling: {text}")
-        elif "zsg-icon-heating" in amenity.next.attrs["class"]:
-            text = amenity.next.next.next.next.text.lower()
-            if text != default_text:
-                amenities_list.append(f"heating: {text}")
-        elif "zsg-icon-pets" in amenity.next.attrs["class"]:
-            text = amenity.next.next.next.next.text.lower()
-            if text != default_text:
-                amenities_list.append(f"pets: {text}")
-        elif "zsg-icon-parking" in amenity.next.attrs["class"]:
-            text = amenity.next.next.next.next.text.lower()
-            if text != default_text:
-                amenities_list.append(f"parking: {text}")
-        elif "zsg-icon-laundry" in amenity.next.attrs["class"]:
-            text = amenity.next.next.next.next.text.lower()
-            if text != default_text:
-                amenities_list.append(f"laundry: {text}")
-    return ", ".join(amenities_list)
+    amenities = []
+    attributes = soup.find_all("p", {"class": "attrgroup"})[-1]
+    for span in attributes.find_all("span"):
+        amenities.append(span.text)
+    return ", ".join(amenities)
 
 
 @safety_net
@@ -274,10 +323,9 @@ def get_days_listed(soup):
     :param soup: BeautifulSoup object
     :return int: number of days listed
     """
-    overview = soup.find("div", {"class": "ds-overview"})
-    for div in overview.find_all("div"):
-        if div.text == "Days listed":
-            return string_to_int(div.next.next.next)
+    timestamp = soup.find("time", {"class": "date timeago"}).attrs["datetime"]
+    date = datetime.strptime(timestamp.split("T")[0], "%Y-%m-%d")
+    return (datetime.today() - date).days
 
 
 @safety_net
@@ -288,9 +336,11 @@ def get_property_size(soup):
     :param soup: BeautifulSoup object
     :return int: property size
     """
-    lst = list(soup.find(
-        "h3", {"class": "ds-bed-bath-living-area-container"}).children)
-    return string_to_int(lst[4].text.split()[0])
+    attributes = soup.find("p", {"class": "attrgroup"})
+    for span in attributes.find_all("span"):
+        match = re.search(r"((\d+,)?\d+)ft2", span.text)
+        if match:
+            return string_to_int(match.group(1))
 
 
 @safety_net
@@ -301,10 +351,8 @@ def get_year_built(soup):
     :param soup: BeautifulSoup object
     :return str: year the property was built
     """
-    features = soup.find_all("h3")[1].next_sibling
-    for f in features:
-        if f.find("div").text.lower() == "build":
-            return f.find("p").text.strip()
+    # not available
+    return
 
 
 @safety_net
@@ -315,11 +363,11 @@ def get_bedrooms(soup):
     :param soup: BeautifulSoup object
     :return int: number of bedrooms
     """
-    lst = list(soup.find(
-        "h3", {"class": "ds-bed-bath-living-area-container"}).children)
-    if "--" in lst[0].text:
-        return 0
-    return string_to_int(lst[0].text.split()[0])
+    attributes = soup.find("p", {"class": "attrgroup"})
+    for span in attributes.find_all("span"):
+        match = re.search(r"(\d+)([Bb][Rr])", span.text)
+        if match:
+            return string_to_int(match.group(1))
 
 
 @safety_net
@@ -330,12 +378,11 @@ def get_bathrooms(soup):
     :param soup: BeautifulSoup object
     :return int: number of bathrooms
     """
-    lst = list(soup.find(
-        "h3", {"class": "ds-bed-bath-living-area-container"}).children)
-    string = lst[2].text.split()[0]
-    if ".5" in string:
-        return string_to_int(string.split(".")[0])
-    return string_to_int(string)
+    attributes = soup.find("p", {"class": "attrgroup"})
+    for span in attributes.find_all("span"):
+        match = re.search(r"(\d+)(\.5)?([Bb][Aa])", span.text)
+        if match:
+            return string_to_int(match.group(1))
 
 
 @safety_net
@@ -344,12 +391,13 @@ def get_half_bathrooms(soup):
     Get the number of half bathrooms from the tag soup.
 
     :param soup: BeautifulSoup object
-    :return int: number of bathrooms
+    :return int: number of half bathrooms
     """
-    lst = list(soup.find(
-        "h3", {"class": "ds-bed-bath-living-area-container"}).children)
-    if ".5" in lst[2].text.split()[0]:
-        return 1
+    attributes = soup.find("p", {"class": "attrgroup"})
+    for span in attributes.find_all("span"):
+        match = re.search(r"(\d+)(\.5)?([Bb][Aa])", span.text)
+        if match and match.group(2):
+            return 1
     return 0
 
 
@@ -373,10 +421,8 @@ def get_listing_type(soup):
     :param soup: BeautifulSoup object
     :return str: property type
     """
-    features = soup.find_all("h3")[1].next_sibling
-    for f in features:
-        if f.find("div").text.lower() == "property type":
-            return f.find("p").text.strip()
+    # not available
+    return
 
 
 def parse_webpage(soup):

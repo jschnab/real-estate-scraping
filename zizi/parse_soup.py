@@ -152,7 +152,7 @@ def get_zip(soup):
     Get burrough name from the tag soup.
 
     :param soup: BeautifulSoup object
-    :return str: burrough name
+    :return str: zip code
     """
     container = soup.find("h1", {"class": "ds-address-container"})
     address = "".join(
