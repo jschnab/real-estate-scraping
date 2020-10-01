@@ -56,7 +56,10 @@ def add_coordinates(
 
             for row in reader:
                 description = row["description"]
-                lat, lon = parse_coordinates_from_description(description)
+                if description != "NULL":
+                    lat, lon = parse_coordinates_from_description(description)
+                else:
+                    lat, lon = "NULL", "NULL"
                 row["latitude"] = lat
                 row["longitude"] = lon
                 writer.writerow(row)
