@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 
 BURROUGHS = {"bronx", "brooklyn", "new york", "queens", "staten island"}
-ZIP_REGEX = r"\s(1\d{4})[\s,$]"
+ZIP_REGEX = r"\s(1\d{4})[\s,$(]"
 
 
 def safety_net(func):
