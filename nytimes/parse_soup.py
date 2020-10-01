@@ -158,7 +158,7 @@ def get_property_type(soup):
     aside = soup.find("aside")
     spans = aside.find_all("span")
     home_details = list(spans[4])
-    return str(home_details[0])
+    return str(home_details[-1])
 
 
 @safety_net

@@ -32,7 +32,7 @@ def is_valid_listings(link):
 
 def get_listings(soup):
     """
-    Get NY Times real estate listings links from a web page.
+    Get Craigslist real estate listings links from a web page.
 
     :param soup: web page contents parsed with BeautifulSoup
     :param callable is_valid: determines if the link is of interest
@@ -64,7 +64,7 @@ def get_next_page(url):
 def wrapper_next_page(url):
     """
     Wrap `get_next_page()` to return a list so it's compatible with
-    the Crawler class expectation for `get_crawlable`
+    the Browser class expectation for `get_crawlable`
 
     :param str url: URL to pass to `get_next_page()`
     :return list[str]: list of URLs to crawl

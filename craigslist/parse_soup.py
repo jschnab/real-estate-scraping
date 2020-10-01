@@ -35,7 +35,7 @@ def safety_net(func):
 
 def clean_string(string):
     """
-    Remove unwanted characters from strings (sybols, HTML characters, etc).
+    Remove unwanted characters from strings (symbols, HTML characters, etc).
 
     :param str string: string to clean
     :returns: str - cleaned string
