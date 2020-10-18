@@ -1,8 +1,10 @@
 import bz2
 import csv
 import glob
+import json
 import logging
 import os
+import random
 import time
 
 from collections import deque
@@ -45,6 +47,7 @@ class Browser:
         soup_parser=None,
         geolocator=None,
         config_file="browser.conf",
+        override_user_agents=True,
         harvest_date=None,
     ):
         """
@@ -86,6 +89,8 @@ class Browser:
         :param callable geolocator: function which adds latitude and longitude
                                     to a home listing
         :param str config_file: name of the configuration file
+        :param bool override_user_agents: if True, overrides the native user
+                                          agent of the Selenium webdriver
         :param str harvest_date: date of harvest, format YYYYMMDD
         """
         self.base_url = base_url
@@ -102,6 +107,7 @@ class Browser:
         self.s3_client = boto3.client("s3")
         self.explored = Explored()
         self.harvest_pauses = 0
+        self.override_user_agents = override_user_agents
         self.harvest_date = self.set_harvest_date(harvest_date)
         if not html_parser:
             self.html_parser = partial(BeautifulSoup, features="html.parser")
@@ -125,12 +131,28 @@ class Browser:
             self.browse_delay = browse_delay
 
         # apply config
+        user_agents_path = os.path.join(CONFIG_DIR, "user_agents")
+        if Path(user_agents_path).exists():
+            logging.info(f"reading user agents '{user_agents_path}'")
+            self.user_agents = self.get_user_agents(user_agents_path)
+        else:
+            self.user_agents = []
         self.config_path = os.path.join(CONFIG_DIR, config_file)
         if Path(self.config_path).exists():
             logging.info(f"reading config '{self.config_path}'")
             self.configure(self.config_path)
         else:
             logging.warning(f"config file not found: '{self.config_path}'")
+
+    def get_user_agents(self, user_agents_path):
+        """
+        Get the list of user agents from a JSON file.
+
+        :param str user_agents_path: path of the file storing user agents
+        :returns (list): list of user agents
+        """
+        with open(user_agents_path) as f:
+            return json.load(f)
 
     def set_harvest_date(self, date):
         """
@@ -176,14 +198,29 @@ class Browser:
         #    "excludeSwitches",
         #    ["enable-automation"]
         # )
+
+        profile = webdriver.FirefoxProfile()
+        if self.override_user_agents and self.user_agents:
+            self.user_agent = random.choice(self.user_agents)
+            logging.info(f"using User-Agent: {self.user_agent}")
+            profile.set_preference(
+                "general.useragent.override",
+                self.user_agent
+            )
+
         self.webdriver = webdriver.Firefox(
             executable_path=driver_path,
             options=options,
+            firefox_profile=profile,
             log_path=os.path.join(CONFIG_DIR, "geckodriver.log"),
         )
-        self.user_agent = self.webdriver.execute_script(
-           "return navigator.userAgent"
-        )
+
+        # use native webdriver user agent if we did not override
+        if not (self.override_user_agents and self.user_agents):
+            self.user_agent = self.webdriver.execute_script(
+               "return navigator.userAgent"
+            )
+            logging.info(f"using User-Agent: {self.user_agent}")
 
         logging.basicConfig(
             format="%(asctime)s %(levelname)s %(message)s",
