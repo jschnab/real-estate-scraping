@@ -327,7 +327,7 @@ class Browser:
     @timeout(60)
     def get_page_contents(self, url):
         self.webdriver.get(url)
-        time.sleep(self.wait_page_load)
+        time.sleep(random.gauss(self.wait_page_load, self.wait_page_load / 6))
         return self.webdriver.page_source
 
     def download_page(self, url):
@@ -371,7 +371,7 @@ class Browser:
 
             logging.info(f"downloading {cut_url(current)}")
             content = self.download_page(current)
-            time.sleep(self.browse_delay)
+            time.sleep(random.gauss(self.browse_delay, self.browse_delay / 6))
 
             # if download failed, push URL back to queue
             if content is None:
@@ -423,7 +423,7 @@ class Browser:
 
             logging.info(f"downloading {cut_url(current)}")
             content = self.download_page(current)
-            time.sleep(self.browse_delay)
+            time.sleep(random.gauss(self.browse_delay, self.browse_delay / 6))
 
             # if download failed, push URL back to queue
             if content is None:
