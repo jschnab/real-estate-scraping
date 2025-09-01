@@ -1,0 +1,72 @@
+#!/bin/bash
+
+set -ex
+set -o pipefail
+
+exec > >(tee /var/log/user_data.log | logger -t user_data) 2>&1
+echo BEGIN
+BEGINTIME=$(date +%s)
+date "+%Y-%m-%d %H:%M:%S"
+
+TOR_PASSWORD=
+S3_BUCKET=
+
+yum update -y
+amazon-linux-extras install -y epel
+yum-config-manager --enable epel*
+yum install -y git python3 gcc postgresql-devel python3-devel.x86_64 tor
+
+pip3 install bs4 torrequest awscli boto3
+
+adduser harvester
+HARVESTER_HOME=/home/harvester
+
+cat << EOT > /etc/tor/torrc
+SOCKSPort 9050
+ControlPort 9051
+CookieAuthentication 1
+EOT
+
+mkdir "$HARVESTER_HOME"/.browsing
+echo "TOR_PASSWORD=$TOR_PASSWORD" > "$HARVESTER_HOME"/.browsing/vars.conf
+echo "HashedControlPassword $(tor --hash-password "$TOR_PASSWORD" | grep --color=never 16:[A-Z0-9])" >> /etc/tor/torrc
+systemctl restart tor
+
+mkdir "$HARVESTER_HOME"/.aws
+cat << EOT > "$HARVESTER_HOME"/.aws/config
+[default]
+region = us-east-1
+output = json
+EOT
+
+git clone https://github.com/jschnab/real-estate-scraping.git "$HARVESTER_HOME"/real-estate-scraping
+aws s3 cp --recursive s3://real-estate-browsing/config "$HARVESTER_HOME"/.browsing
+
+chown -R harvester:harvester "$HARVESTER_HOME"
+
+cat << EOF > /etc/systemd/system/harvest_re.service
+[Unit]
+Description=Automated web browser for real estate
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=$HARVESTER_HOME/.browsing/vars.conf
+User=harvester
+Group=harvester
+ExecStart=/usr/bin/python3 $HARVESTER_HOME/real-estate-scraping/test.py harvest
+Restart=always
+TimeoutStartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl enable harvest_re.service
+systemctl start harvest_re.service
+
+date "+%Y-%m-%d %H:%M:%S"
+ENDTIME=$(date +%s)
+echo "deployment took $((ENDTIME - BEGINTIME)) seconds"
+echo END

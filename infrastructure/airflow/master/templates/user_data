@@ -1,0 +1,64 @@
+#!/bin/bash
+
+set -ex
+set -o pipefail
+
+exec > >(tee /var/log/user_data.log | logger -t user_data) 2>&1
+echo BEGIN
+BEGINTIME=$(date +%s)
+date "+%Y-%m-%d %H:%M:%S"
+
+yum update -y
+yum install -y git python3 gcc postgresql-devel python3-devel.x86_64 openssl-devel libcurl-devel
+
+pip3 install psycopg2 bs4 torrequest awscli boto3 apache-airflow[celery] selenium
+pip3 install pycurl --global-option="--with-openssl"
+
+adduser airflow
+AIRFLOW_HOME=/home/airflow
+AIRFLOW_ENV="$AIRFLOW_HOME"/airflow.env
+AIRFLOW_BIN=/usr/local/bin/airflow
+
+cat << EOF > "$AIRFLOW_HOME"/airflow.cfg
+${airflow_config}
+EOF
+
+cat << EOF > /etc/systemd/system/airflow-webserver.service
+${worker_service}
+EOF
+
+cat << EOF > /etc/systemd/system/airflow-scheduler.service
+${scheduler_service}
+EOF
+
+cat << EOF > "$AIRFLOW_ENV"
+AIRFLOW_HOME="$AIRFLOW_HOME"
+AIRFLOW_CONFIG="$AIRFLOW_HOME"/airflow.cfg
+EOF
+
+mkdir "$AIRFLOW_HOME"/.aws
+cat << EOT > "$AIRFLOW_HOME"/.aws/config
+[default]
+region = us-east-1
+output = json
+EOT
+
+mkdir "$AIRFLOW_HOME"/logs
+mkdir "$AIRFLOW_HOME"/dags
+
+git clone https://github.com/jschnab/real-estate-scraping.git
+cp real-estate-scraping/airflow_dag.py "$AIRFLOW_HOME"/dags/
+mv real-estate-scraping "$AIRFLOW_HOME"/real-estate-scraping
+aws s3 cp --recursive s3://real-estate-browsing/config "$AIRFLOW_HOME"/.browsing
+
+chown -R airflow:airflow "$AIRFLOW_HOME"
+
+systemctl enable airflow-webserver
+systemctl enable airflow-scheduler
+systemctl start airflow-webserver
+systemctl start airflow-scheduler
+
+date "+%Y-%m-%d %H:%M:%S"
+ENDTIME=$(date +%s)
+echo "deployment took $((ENDTIME - BEGINTIME)) seconds"
+echo END

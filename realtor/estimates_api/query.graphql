@@ -1,0 +1,61 @@
+query DPPropertyEstimates(
+    $propertyId: ID!,
+    $listingId: ID,
+    $historicalYearsMin: DateTime,
+    $historicalYearsMax: DateTime,
+    $forecastedMonthsMax: DateTime
+) {
+    home(
+        property_id: $propertyId,
+        listing_id: $listingId
+    ) {
+        estimates {
+            current_values(filter: {status: ["sold", "off_market", "other"]}) {
+                isbest_homevalue
+                estimate
+                estimate_high
+                estimate_low
+                date
+                source {
+                    type
+                    name
+                    __typename
+                }
+                __typename
+            }
+            historical_values(
+                date_range: {
+                    min: $historicalYearsMin,
+                    max: $historicalYearsMax
+                }
+            ) {
+                source {
+                    name
+                    type
+                    __typename
+                }
+                estimates {
+                    estimate
+                    date
+                    __typename
+                }
+                __typename
+            }
+            forecast_values(max_date: $forecastedMonthsMax) {
+                source {
+                    name
+                    type
+                    __typename
+                }
+                estimates {
+                    estimate
+                    date
+                    __typename
+                }
+                __typename
+            }
+            __typename
+        }
+        __typename
+    }
+}
